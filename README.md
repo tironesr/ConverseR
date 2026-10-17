@@ -22,8 +22,7 @@ if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes")
 }
 
-# Replace YOUR_GITHUB_USERNAME with the repository owner's GitHub username:
-remotes::install_github("YOUR_GITHUB_USERNAME/ConverseR", dependencies = TRUE)
+remotes::install_github("tironesr/ConverseR", dependencies = TRUE)
 ```
 
 ### Option B: Install from a `.tar.gz` Package Bundle

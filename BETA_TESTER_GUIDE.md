@@ -18,25 +18,25 @@ You have **two easy ways** to share the package with your 3–5 beta testers:
 
 This is the cleanest experience for macOS and Windows users because `remotes::install_github()` downloads `ConverseR` and installs every CRAN dependency in a single line.
 
-1. **Create a new repository on GitHub** named `ConverseR` (e.g. `https://github.com/YOUR_USERNAME/ConverseR`).
+1. **Create a new repository on GitHub** named `ConverseR` (e.g. `https://github.com/tironesr/ConverseR`).
 2. **Push this folder to GitHub** from your terminal or PowerShell:
    ```powershell
    git init
    git add .
    git commit -m "Initial beta release of ConverseR (v0.4.0)"
    git branch -M main
-   git remote add origin https://github.com/YOUR_USERNAME/ConverseR.git
+   git remote add origin https://github.com/tironesr/ConverseR.git
    git push -u origin main
    ```
 3. **Optional — Host the Getting Started Guide at a public URL via GitHub Pages**:
    - On GitHub, go to **Settings -> Pages**.
    - Under **Build and deployment**, select **Deploy from a branch** -> `main` -> `/ (root)` and click **Save**.
    - Within 60 seconds, your standalone guide (`ConverseR-guide.html`) will be live on the web at:
-     `https://YOUR_USERNAME.github.io/ConverseR/ConverseR-guide.html`
+     `https://tironesr.github.io/ConverseR/ConverseR-guide.html`
 4. **Tester Installation Command (Mac & Windows)**:
    ```r
    install.packages("remotes")
-   remotes::install_github("YOUR_USERNAME/ConverseR", dependencies = TRUE)
+   remotes::install_github("tironesr/ConverseR", dependencies = TRUE)
    ```
 
 ---
@@ -80,7 +80,7 @@ Open **RStudio** (R >= 4.3 recommended) and run the following in your R Console:
 *(If installing from GitHub)*:
 ```r
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
-remotes::install_github("YOUR_USERNAME/ConverseR", dependencies = TRUE)
+remotes::install_github("tironesr/ConverseR", dependencies = TRUE)
 ```
 
 *(Or if installing from the attached `ConverseR_0.4.0.tar.gz` file)*:

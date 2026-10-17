@@ -484,21 +484,14 @@ converser_inspect_config <- function() {
 #'   for full-screen reading; if `FALSE`, opens in the RStudio Viewer pane.
 #' @export
 converser_guide <- function(browser = TRUE) {
-  guide_path <- system.file("doc", "ConverseR-guide.html", package = "ConverseR")
-  if (!nzchar(guide_path) || !file.exists(guide_path)) {
-    local_path <- file.path("inst", "doc", "ConverseR-guide.html")
-    if (file.exists(local_path)) guide_path <- normalizePath(local_path, winslash = "/")
-  }
-  if (!nzchar(guide_path) || !file.exists(guide_path)) {
-    cli_abort("Could not locate {.file ConverseR-guide.html}.")
-  }
+  guide_url <- "https://tironesr.github.io/ConverseR/ConverseR-guide.html"
 
   if (!isTRUE(browser) && rstudioapi::isAvailable() && rstudioapi::hasFun("viewer")) {
-    rstudioapi::viewer(guide_path)
+    rstudioapi::viewer(guide_url)
   } else {
-    utils::browseURL(guide_path)
+    utils::browseURL(guide_url)
   }
-  invisible(guide_path)
+  invisible(guide_url)
 }
 
 # Read SKILL.md or unpack a bundled Skill .zip archive -------------------------
