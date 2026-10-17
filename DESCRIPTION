@@ -1,0 +1,50 @@
+Package: ConverseR
+Title: Next-Generation Context-Aware LLM Assistant and Sidebar for RStudio and Positron
+Version: 0.4.0
+Authors@R: 
+    person("Tyrone", "", , "tyrone@example.com", role = c("aut", "cre"))
+Description: A high-performance, fault-tolerant Large Language Model integration 
+    for RStudio and Positron built on 'ellmer'. Overcomes the limitations of 
+    first-generation inline assistants by providing a non-blocking background 
+    Viewer Pane sidebar (via 'later' and 'httpuv' so your R console stays 100% 
+    free while chatting), interactive OpenRouter model & privacy/ZDR/reasoning 
+    configuration, a built-in SKILL.md and ZIP bundle loader, intelligent 
+    windowed code context, AST-based and word-boundary environment inspection, 
+    S3 class-aware summaries for statistical models and data frames, autonomous 
+    tool-calling for live R session introspection, console-aware error fixes, 
+    and throttled inline streaming.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.2.0)
+Imports:
+    broom,
+    bslib,
+    cli (>= 3.6.0),
+    commonmark,
+    coro,
+    ellmer (>= 0.3.0),
+    glue (>= 0.6.0),
+    htmltools,
+    httpuv,
+    jsonlite,
+    later,
+    miniUI (>= 0.1.1.1),
+    rlang (>= 1.1.0),
+    rstudioapi (>= 0.15.0),
+    shiny (>= 1.8.0),
+    stats,
+    tools,
+    treesitter,
+    treesitter.r,
+    utils
+Suggests:
+    diffobj,
+    ggplot2,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3

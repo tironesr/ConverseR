@@ -1,0 +1,6 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^README\.md$
+^ConverseR-guide\.html$
+^BETA_TESTER_GUIDE\.md$
+^ConverseR_.*\.tar\.gz$

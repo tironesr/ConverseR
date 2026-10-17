@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ConverseR — Getting Started Guide</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-alt: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #475569;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-soft: #eff6ff;
+    --code-bg: #0f172a;
+    --code-fg: #f8fafc;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.62;
+    font-size: 15px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 270px 1fr;
+    min-height: 100vh;
+  }
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar-nav { display: none; }
+  }
+
+  /* Navigation */
+  .sidebar-nav {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 28px 20px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .brand-sub {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    font-weight: 700;
+    margin: 16px 0 6px 8px;
+  }
+  .nav-link {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+  .nav-link:hover {
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+
+  /* Main Content */
+  .content {
+    max-width: 920px;
+    padding: 36px 48px 72px;
+  }
+  @media (max-width: 768px) {
+    .content { padding: 24px 20px; }
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 30px 36px;
+    margin-bottom: 32px;
+  }
+  .hero h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+  }
+  .hero p {
+    margin: 0;
+    font-size: 15.5px;
+    color: #cbd5e1;
+    max-width: 720px;
+  }
+
+  section {
+    margin-bottom: 44px;
+    scroll-margin-top: 24px;
+  }
+  h2 {
+    font-size: 21px;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h3 {
+    font-size: 16.5px;
+    margin: 22px 0 8px;
+    color: #1e293b;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin: 14px 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h4 {
+    margin: 0 0 6px;
+    font-size: 15px;
+  }
+  .card p {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+  }
+  .shortcut-box {
+    background: var(--surface);
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid var(--primary);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin: 14px 0;
+  }
+  .shortcut-steps {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 0;
+  }
+  .shortcut-steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  .shortcut-steps li .bullet {
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: 11.5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .code-block {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 9px;
+    margin: 12px 0 18px;
+    overflow: hidden;
+    border: 1px solid #334155;
+  }
+  .code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e293b;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    color: #94a3b8;
+    font-family: Consolas, monospace;
+    border-bottom: 1px solid #334155;
+  }
+  .copy-btn {
+    background: #334155;
+    color: #f8fafc;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .copy-btn:hover { background: #475569; }
+  .code-block pre {
+    margin: 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  code {
+    font-family: Consolas, monospace;
+    font-size: 0.9em;
+    background: #e2e8f0;
+    color: #0f172a;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .code-block code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface-alt);
+    font-weight: 700;
+    color: #334155;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .ui-mockup {
+    background: var(--surface);
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    padding: 12px 14px;
+    margin: 14px 0;
+  }
+  .mock-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .mock-btn {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+  .callout {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 9px;
+    padding: 14px 18px;
+    margin: 14px 0;
+    font-size: 14px;
+    color: #1e3a8a;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar-nav">
+    <div class="brand">ConverseR</div>
+    <div class="brand-sub">Getting Started Guide</div>
+
+    <div class="nav-group-title">Setup</div>
+    <a class="nav-link" href="#overview">1. Overview</a>
+    <a class="nav-link" href="#openrouter">2. OpenRouter &amp; API Key Setup</a>
+    <a class="nav-link" href="#defaults">3. Saving Default Settings</a>
+    <a class="nav-link" href="#shortcuts">4. Keyboard Shortcuts</a>
+
+    <div class="nav-group-title">Workflows</div>
+    <a class="nav-link" href="#sidebar">5. Using the Sidebar</a>
+    <a class="nav-link" href="#inline">6. Inline Code Edits</a>
+    <a class="nav-link" href="#plots-errors">7. Sharing Plots &amp; Fixing Errors</a>
+
+    <div class="nav-group-title">Customization</div>
+    <a class="nav-link" href="#reasoning">8. Models, Privacy &amp; Reasoning</a>
+    <a class="nav-link" href="#skills">9. Setting Up SKILL.md &amp; Skill.zip</a>
+    <a class="nav-link" href="#reference">10. Function Reference</a>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <h1>Getting Started with ConverseR</h1>
+      <p>
+        ConverseR integrates OpenRouter language models directly into RStudio. Chat with an assistant that automatically understands your active script and <code>.GlobalEnv</code> objects, make quick inline code edits via keyboard shortcut, share plots, and guide coding behavior with custom skill files.
+      </p>
+    </div>
+
+    <!-- 1. OVERVIEW & INSTALLATION -->
+    <section id="overview">
+      <h2><span class="step-num">1</span> Overview &amp; Installation (macOS &amp; Windows)</h2>
+      <p>ConverseR provides two tools that share your active script context, <code>.GlobalEnv</code> data summaries, and model settings:</p>
+      <div class="card-grid">
+        <div class="card">
+          <h4><code>converser()</code> — Interactive Sidebar</h4>
+          <p>
+            Opens in the RStudio Viewer pane while keeping your R Console free for coding. Use it to ask questions, diagnose errors, share plots, preview code diffs, and manage settings.
+          </p>
+        </div>
+        <div class="card">
+          <h4><code>converser_inline()</code> — Inline Code Assistant</h4>
+          <p>
+            A compact prompt bar designed to be bound to a keyboard shortcut. Highlight code in your script, enter a quick instruction, and replace or insert code directly.
+          </p>
+        </div>
+      </div>
+
+      <h3>Installing ConverseR (macOS &amp; Windows)</h3>
+      <p>Run the following in your RStudio Console to install <code>ConverseR</code> and all required CRAN dependencies automatically:</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span>R Console — Install with All Dependencies</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <pre><code>if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+
+# Option A: Install from GitHub
+remotes::install_github("YOUR_GITHUB_USERNAME/ConverseR", dependencies = TRUE)
+
+# Option B: Or install from a shared ConverseR_0.4.0.tar.gz bundle file
+# remotes::install_local(file.choose(), dependencies = TRUE)</code></pre>
+      </div>
+    </section>
+
+    <!-- 2. OPENROUTER -->
+    <section id="openrouter">
+      <h2><span class="step-num">2</span> Understanding OpenRouter &amp; Getting an API Key</h2>
+
+      <h3>What is OpenRouter?</h3>
+      <p>
+        <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> is a unified API gateway that gives you access to hundreds of leading language models—including Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, Qwen, and Mistral—through a single account and a single API key. Instead of managing separate accounts and monthly subscriptions across multiple AI vendors, OpenRouter lets you switch between models at any time from one interface.
+      </p>
+
+      <h3>What Signing Up Requires</h3>
+      <ol>
+        <li>
+          <strong>Create an Account:</strong> Visit <a href="https://openrouter.ai" target="_blank" rel="noopener">https://openrouter.ai</a> and sign in using a Google account, GitHub account, or email address.
+        </li>
+        <li>
+          <strong>Add Prepaid Credits:</strong> Navigate to <strong>Settings &rarr; Credits</strong> (<a href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">openrouter.ai/settings/credits</a>). OpenRouter operates on a pay-as-you-go basis with no recurring monthly subscription. Adding a small balance (such as $5–$10) is typically sufficient for thousands of R coding and data science requests.
+        </li>
+        <li>
+          <strong>Generate an API Key:</strong> Navigate to <strong>Settings &rarr; Keys</strong> (<a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">openrouter.ai/settings/keys</a>), click <strong>Create Key</strong>, give it a name (e.g., <code>ConverseR</code>), optionally set a credit limit, and copy the resulting key (which begins with <code>sk-or-v1-...</code>).
+        </li>
+      </ol>
+
+      <h3>What Your OpenRouter API Key Allows You to Do in ConverseR</h3>
+      <ul>
+        <li><strong>Switch Models Anytime:</strong> Choose from the Top 20 OpenRouter models in the Sidebar dropdown—or search the full catalog of 400+ models—to match the task at hand (e.g., fast everyday coding vs. complex statistical modeling).</li>
+        <li><strong>Enforce Privacy &amp; Zero Data Retention (ZDR):</strong> Restrict requests exclusively to providers that do not retain data or train on your code and environment summaries.</li>
+        <li><strong>Control Thinking / Reasoning Depth:</strong> Adjust reasoning effort (<code>None</code>, <code>Minimal</code>, <code>Low</code>, <code>Medium</code>, <code>High</code>) across supported reasoning models from a single menu.</li>
+        <li><strong>Use Vision Capabilities:</strong> Attach active RStudio plots via <strong>Share Plot</strong> when using multimodal models.</li>
+      </ul>
+    </section>
+
+    <!-- 3. SAVING DEFAULT SETTINGS -->
+    <section id="defaults">
+      <h2><span class="step-num">3</span> Saving Default Settings (No <code>.Rprofile</code> Editing Required)</h2>
+      <p>
+        ConverseR includes built-in persistent configuration storage. You do <strong>not</strong> need to manually edit <code>.Rprofile</code> or <code>.Renviron</code> to keep your API key, model, or skills across R sessions.
+      </p>
+
+      <h3>Method A: Save Defaults via the Sidebar Settings Panel (Recommended)</h3>
+      <ol>
+        <li>Run <code>library(ConverseR)</code> and <code>converser()</code> to open the Sidebar in your RStudio Viewer pane.</li>
+        <li>Click <strong>Settings</strong> in the top-right header of the Sidebar.</li>
+        <li>Paste your <code>sk-or-v1-...</code> key into the <strong>OpenRouter API Key</strong> field.</li>
+        <li>Select your preferred model, reasoning effort, privacy settings, and optional <code>SKILL.md</code> or <code>.zip</code> skill bundle.</li>
+        <li>Keep <strong>Save as default across R sessions</strong> checked at the bottom of the Settings window and click <strong>Save &amp; Apply</strong>.</li>
+      </ol>
+
+      <h3>Method B: Save Defaults from the R Console</h3>
+      <p>You can also configure and save your defaults from the R Console by setting <code>persist = TRUE</code>:</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span>R Console</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <pre><code>library(ConverseR)
+
+converser_use_openrouter(
+  api_key          = "sk-or-v1-your-openrouter-key",
+  model            = "deepseek/deepseek-v4.1-flash",
+  reasoning_effort = "low",
+  zdr              = TRUE,
+  data_collection  = "deny",
+  persist          = TRUE
+)</code></pre>
+      </div>
+      <p>
+        Once saved, ConverseR automatically loads your API key, model, and skill configuration whenever you run <code>library(ConverseR)</code> in a new R session.
+      </p>
+    </section>
+
+    <!-- 4. KEYBOARD SHORTCUTS -->
+    <section id="shortcuts">
+      <h2><span class="step-num">4</span> Binding a Keyboard Shortcut for Inline Edits</h2>
+      <p>
+        Binding <code>converser_inline()</code> to a keyboard shortcut allows you to highlight code in your script and trigger quick edits without touching the mouse.
+      </p>
+      <div class="shortcut-box">
+        <ul class="shortcut-steps">
+          <li>
+            <span class="bullet">1</span>
+            <div>In RStudio, open <strong>Tools</strong> &rarr; <strong>Modify Keyboard Shortcuts...</strong></div>
+          </li>
+          <li>
+            <span class="bullet">2</span>
+            <div>Type <code>ConverseR</code> into the <strong>Filter...</strong> search box.</div>
+          </li>
+          <li>
+            <span class="bullet">3</span>
+            <div>
+              Click in the <strong>Shortcut</strong> column next to <strong>ConverseR: Inline Code Assistant</strong> and press your preferred key combination (for example, <span class="kbd">Ctrl</span>+<span class="kbd">Alt</span>+<span class="kbd">I</span> on Windows/Linux or <span class="kbd">Cmd</span>+<span class="kbd">Option</span>+<span class="kbd">I</span> on macOS).
+            </div>
+          </li>
+          <li>
+            <span class="bullet">4</span>
+            <div>
+              <em>(Optional)</em> Bind <strong>ConverseR: Open Sidebar</strong> to <span class="kbd">Ctrl</span>+<span class="kbd">Alt</span>+<span class="kbd">C</span>.
+            </div>
+          </li>
+          <li>
+            <span class="bullet">5</span>
+            <div>Click <strong>Apply</strong>.</div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 5. SIDEBAR -->
+    <section id="sidebar">
+      <h2><span class="step-num">5</span> Using the Sidebar (<code>converser()</code>)</h2>
+      <p>
+        Run <code>converser()</code> to open the Sidebar. Every code block generated by the assistant includes five actions in its top toolbar:
+      </p>
+      <div class="ui-mockup">
+        <div class="mock-toolbar">
+          <span style="font-family:Consolas,monospace; font-size:11px; color:#94a3b8;">R CODE</span>
+          <div>
+            <span class="mock-btn" style="background:#4f46e5;">Run in Console</span>
+            <span class="mock-btn" style="background:#0f766e;">Preview Difference</span>
+            <span class="mock-btn" style="background:#2563eb;">Replace</span>
+            <span class="mock-btn" style="background:#334155;">Insert in Script</span>
+            <span class="mock-btn" style="background:#334155;">Copy</span>
+          </div>
+        </div>
+      </div>
+      <ul>
+        <li><strong>Run in Console:</strong> Executes the code block directly in your R Console without modifying your active script.</li>
+        <li><strong>Preview Difference:</strong> Opens an inline red/green diff comparing your highlighted script selection against the proposed code.</li>
+        <li><strong>Replace:</strong> Replaces the currently highlighted text in your script (automatically disabled when no text is highlighted).</li>
+        <li><strong>Insert in Script:</strong> Inserts the code at your cursor position in the active script.</li>
+        <li><strong>Copy:</strong> Copies the code block to your clipboard.</li>
+      </ul>
+      <p>To revert the most recent script edit made by ConverseR, click <strong>Undo</strong> in the Sidebar header or run <code>converser_undo()</code>.</p>
+    </section>
+
+    <!-- 6. INLINE EDITS -->
+    <section id="inline">
+      <h2><span class="step-num">6</span> Using the Inline Code Assistant (<code>converser_inline()</code>)</h2>
+      <ol>
+        <li>Highlight code in your R script or Quarto/RMarkdown document (or place your cursor where you want code inserted).</li>
+        <li>Press your keyboard shortcut (or run <code>converser_inline()</code>).</li>
+        <li>Select <strong>Replace</strong>, <strong>Insert Before</strong>, or <strong>Insert After</strong>.</li>
+        <li>
+          Check <strong>Preview Difference first</strong> to inspect a red/green diff in the Sidebar before modifying your file, or leave it unchecked to stream the code directly into your script.
+        </li>
+        <li>Type your instruction and press <span class="kbd">Enter</span> (or click <strong>Generate</strong>).</li>
+      </ol>
+    </section>
+
+    <!-- 7. PLOTS & ERRORS -->
+    <section id="plots-errors">
+      <h2><span class="step-num">7</span> Sharing Plots &amp; Fixing Errors</h2>
+      <ul>
+        <li>
+          <strong>Share Plot:</strong> Click the <strong>Share Plot</strong> button above the Sidebar input box to attach your active RStudio plot to your next message, then ask any question or request specific visual adjustments.
+        </li>
+        <li>
+          <strong>Fix Error:</strong> Click <strong>Fix Error</strong> to send your most recent R error message and backtrace to the assistant. When the corrected code is returned, click <strong>Run in Console</strong> if you are working interactively in the console, or <strong>Replace</strong> / <strong>Insert in Script</strong> if you want to update your script.
+        </li>
+      </ul>
+    </section>
+
+    <!-- 8. MODELS & REASONING -->
+    <section id="reasoning">
+      <h2><span class="step-num">8</span> Models, Privacy (ZDR) &amp; Reasoning Levels</h2>
+      <p>
+        In <strong>Settings</strong>, the model dropdown automatically lists the <strong>Top 20 OpenRouter Models</strong>. Click <strong>Show All Models</strong> to load the complete OpenRouter catalog, or type any model ID into the search box.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Reasoning Level</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Model Default (Auto)</code></td>
+            <td>Uses the selected model's native default behavior.</td>
+          </tr>
+          <tr>
+            <td><code>None</code></td>
+            <td>Disables reasoning tokens for fastest response times.</td>
+          </tr>
+          <tr>
+            <td><code>Minimal</code> / <code>Low</code></td>
+            <td>Allocates a light reasoning budget (~10%–20%) for everyday coding and quick checks.</td>
+          </tr>
+          <tr>
+            <td><code>Medium</code> / <code>High</code></td>
+            <td>Allocates a deeper reasoning budget (~50%–80%) for complex statistical modeling and debugging.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Run <code>converser_inspect_config()</code> in the R Console at any time to verify the active model, reasoning effort, ZDR settings, and loaded skill files.
+      </p>
+    </section>
+
+    <!-- 9. SKILL.MD & SKILL.ZIP -->
+    <section id="skills">
+      <h2><span class="step-num">9</span> Setting Up <code>SKILL.md</code> or <code>Skill.zip</code> to Guide Coding</h2>
+
+      <h3>What is the Purpose of a Skill File?</h3>
+      <p>
+        Every researcher, lab, or data science workflow has specific preferences—such as using <code>dplyr</code> and native pipes (<code>|&gt;</code>) vs. <code>data.table</code>, fitting models with <code>fixest</code> or <code>lme4</code>, formatting regression tables with <code>modelsummary</code> or <code>gtsummary</code>, or applying a custom <code>ggplot2</code> theme.
+      </p>
+      <p>
+        A <strong><code>SKILL.md</code></strong> file (or a <strong><code>Skill.zip</code></strong> bundle) is a persistent instruction playbook that ConverseR automatically appends to the assistant's system prompt. Instead of repeating your coding preferences in every prompt, your active skill ensures the assistant consistently follows your conventions, variable naming rules, and helper functions.
+      </p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h4>When to Use a Single <code>SKILL.md</code></h4>
+          <p>
+            Best for defining your preferred R packages, coding style rules, statistical reporting conventions, and short code templates in a single Markdown document.
+          </p>
+        </div>
+        <div class="card">
+          <h4>When to Use a <code>Skill.zip</code> Bundle</h4>
+          <p>
+            Best when your workflow relies on companion files—such as a custom <code>R/theme_lab.R</code> script, helper functions, or a variable dictionary (<code>codebook.csv</code>)—bundled together with <code>SKILL.md</code>.
+          </p>
+        </div>
+      </div>
+
+      <h3>Step-by-Step: Using Your Existing R Code to Create a <code>SKILL.md</code></h3>
+      <p>
+        The fastest way to create a tailored <code>SKILL.md</code> is to let ConverseR extract your coding conventions directly from an existing R script and output the entire specification inside a single YAML-formatted code chunk:
+      </p>
+      <ol>
+        <li>Open one of your representative R scripts in RStudio (for example, a script that demonstrates how you clean data, fit models, and format plots).</li>
+        <li>Highlight the script (or key sections of it) and open the Sidebar with <code>converser()</code>.</li>
+        <li>Copy and send the following prompt in the Sidebar:</li>
+      </ol>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>Prompt to Generate a Single YAML-Formatted SKILL.md Chunk</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <pre><code>Analyze the coding style, package choices, data wrangling idioms, statistical modeling conventions, and ggplot2 aesthetic patterns in my active R script. Generate a comprehensive SKILL.md specification that I can use as a persistent system skill so future R code you write strictly follows these exact conventions, naming patterns, and helper functions. Output the ENTIRE skill inside a single ```yaml code chunk (using YAML keys and indented `|` block scalars for any code templates, with no nested triple backticks) so I can copy the entire file in one click.</code></pre>
+      </div>
+
+      <ol start="4">
+        <li>Click <strong>Copy</strong> on the top-right toolbar of the single <code>YAML (SKILL.md)</code> code block generated by the assistant.</li>
+        <li>Click <strong>Settings</strong> in the Sidebar header, scroll to <strong>SKILL.md &amp; ZIP Bundle Loader</strong>, and paste the YAML content into the editor box (or click <strong>Insert Template</strong> to start from a built-in YAML template).</li>
+        <li>Click <strong>Save .md</strong> to save the file to disk, then click <strong>Save &amp; Apply</strong> (with <strong>Save as default across R sessions</strong> checked). A green <code>SKILL</code> badge will appear in the Sidebar header indicating your skill is active.</li>
+      </ol>
+
+      <h3>Creating and Loading a <code>Skill.zip</code> Bundle</h3>
+      <p>
+        If you want the assistant to use your own R helper scripts or reference tables, place <code>SKILL.md</code> and your supporting files (<code>.R</code>, <code>.md</code>, <code>.csv</code>, <code>.yaml</code>) into a folder and compress it into a <code>.zip</code> archive:
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span>Example Skill.zip Folder Structure</span>
+        </div>
+        <pre><code>my_lab_skill.zip
+├── SKILL.md                  # Primary coding &amp; statistical instructions
+├── scripts/
+│   └── lab_helpers.R         # Custom ggplot2 theme and regression helper functions
+└── references/
+    └── codebook.csv          # Dataset variable names and definitions</code></pre>
+      </div>
+      <p>
+        To activate the bundle, open <strong>Settings &rarr; SKILL.md &amp; ZIP Bundle Loader</strong>, click <strong>Upload .md or .zip</strong>, select your <code>.zip</code> file, and click <strong>Save &amp; Apply</strong>. ConverseR extracts the archive into its persistent configuration directory and includes both <code>SKILL.md</code> and your companion resource files in the system prompt.
+      </p>
+    </section>
+
+    <!-- 10. REFERENCE -->
+    <section id="reference">
+      <h2><span class="step-num">10</span> Function Reference</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>converser()</code></td>
+            <td>Open the ConverseR Sidebar in the RStudio Viewer pane.</td>
+          </tr>
+          <tr>
+            <td><code>converser_inline()</code></td>
+            <td>Open the inline code assistant popup.</td>
+          </tr>
+          <tr>
+            <td><code>converser_guide()</code></td>
+            <td>Open this Getting Started Guide.</td>
+          </tr>
+          <tr>
+            <td><code>converser_use_openrouter()</code></td>
+            <td>Configure OpenRouter API key, model, reasoning effort, ZDR, and skills (set <code>persist = TRUE</code> to save across sessions).</td>
+          </tr>
+          <tr>
+            <td><code>converser_save_config()</code></td>
+            <td>Save the current settings and API key as your persistent default across R sessions.</td>
+          </tr>
+          <tr>
+            <td><code>converser_inspect_config()</code></td>
+            <td>Print the active model, OpenRouter parameters, reasoning level, and skill status.</td>
+          </tr>
+          <tr>
+            <td><code>converser_undo()</code></td>
+            <td>Revert the most recent script edit made by ConverseR.</td>
+          </tr>
+          <tr>
+            <td><code>converser_reset()</code></td>
+            <td>Clear the current conversation history.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.closest(".code-block").querySelector("pre");
+  const text = pre ? pre.innerText : "";
+  const markCopied = () => {
+    const old = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = old; }, 1400);
+  };
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) {
+      markCopied();
+      return;
+    }
+  } catch (e) {}
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(markCopied).catch(() => {});
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+Name: ConverseR: Open Sidebar
+Description: Open the clean, non-blocking ConverseR chat sidebar in the RStudio Viewer pane.
+Binding: converser
+Interactive: true
+
+Name: ConverseR: Inline Edit (with Preview Difference)
+Description: Open the minimalist inline prompt bar to stream code or preview differences directly on your selection.
+Binding: converser_inline
+Interactive: true
