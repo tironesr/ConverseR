@@ -255,7 +255,16 @@ open_nonblocking_diff_review <- function(original, proposed, interface = "replac
   # Append a special diff review card into the non-blocking sidebar and open it!
   msgs <- converser_env[["chat_history_ui"]] %||% list()
 
-  user_html <- commonmark::markdown_html(paste0("*(Inline Edit Preview)*: ", prompt), extensions = TRUE)
+  mode_label <- switch(
+    interface,
+    prefix = "Insert Before",
+    suffix = "Insert After",
+    "Replace"
+  )
+  user_html <- commonmark::markdown_html(
+    paste0("*(Inline Edit Preview — ", mode_label, ")*: ", prompt),
+    extensions = TRUE
+  )
   code_md <- paste0("```r\n", proposed, "\n```")
   assistant_html <- commonmark::markdown_html(code_md, extensions = TRUE)
 
@@ -263,7 +272,7 @@ open_nonblocking_diff_review <- function(original, proposed, interface = "replac
     msgs,
     list(
       list(role = "user", html = user_html),
-      list(role = "assistant", html = assistant_html, auto_open_diff = TRUE)
+      list(role = "assistant", html = assistant_html, auto_open_diff = TRUE, preferred_mode = interface)
     )
   )
   converser_env[["chat_history_ui"]] <- msgs

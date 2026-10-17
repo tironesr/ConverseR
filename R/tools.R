@@ -47,10 +47,10 @@ converser_tools <- function() {
     ),
     ellmer::tool(
       tool_inspect_model,
-      description = "Inspect a fitted statistical or machine learning model object (e.g., lm, glm, fixest, lmerMod, coxph) in the user's R Global Environment. Returns formula, coefficient table (broom::tidy), and fit statistics (broom::glance).",
+      description = "Inspect a fitted statistical or machine learning model or hypothesis test object (e.g., lm, glm, fixest, lmerMod/glmerMod, coxph, lavaan, htest) in the user's R Global Environment. Returns formula, family/link, coefficient table with 95% confidence intervals (broom::tidy), random effects variances, and fit statistics (broom::glance).",
       name = "inspect_model",
       arguments = list(
-        name = ellmer::type_string("The exact name of the model object in .GlobalEnv.")
+        name = ellmer::type_string("The exact name of the model or hypothesis test object in .GlobalEnv.")
       )
     ),
     ellmer::tool(
@@ -138,10 +138,10 @@ tool_inspect_model <- function(name) {
   }
 
   x <- get(name, envir = env)
-  if (inherits(x, "lm") || requireNamespace("broom", quietly = TRUE)) {
-    desc <- describe_object.lm(x, name = name)
+  if (inherits(x, "htest")) {
+    desc <- describe_object.htest(x, name = name)
   } else {
-    desc <- utils::capture.output(print(summary(x)))
+    desc <- describe_model_object(x, name = name)
   }
 
   paste(desc, collapse = "\n")

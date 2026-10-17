@@ -23,11 +23,15 @@ test_that("word-boundary object matching prevents false-positive substring match
   expect_true(any(grepl("Missing values (NAs): age=1", res_true_pos, fixed = TRUE)))
 })
 
-test_that("windowed code context truncates huge files while preserving top library() calls", {
+test_that("windowed code context truncates huge files while preserving top YAML frontmatter and library() calls", {
   fake_lines <- c(
+    "---",
+    "title: \"Social Science Study\"",
+    "format: html",
+    "---",
     "library(tidyverse)",
     "library(fixest)",
-    paste0("# line ", 3:500)
+    paste0("# line ", 7:500)
   )
 
   windowed <- ConverseR:::window_document_contents(
@@ -37,22 +41,43 @@ test_that("windowed code context truncates huge files while preserving top libra
     window_lines = 20L
   )
 
-  expect_lt(length(windowed), 60L)
+  expect_lt(length(windowed), 65L)
+  expect_true(any(grepl("title: \"Social Science Study\"", windowed, fixed = TRUE)))
   expect_true(any(grepl("library(tidyverse)", windowed, fixed = TRUE)))
   expect_true(any(grepl("library(fixest)", windowed, fixed = TRUE)))
   expect_true(any(grepl("# line 250", windowed, fixed = TRUE)))
 })
 
-test_that("S3 describe_object summarizes data.frames, lm models, and ggplot objects cleanly", {
-  df <- data.frame(a = c(1, 2, NA), b = c("x", "y", "z"))
+test_that("S3 describe_object summarizes data.frames (including survey labels & factor levels), lm/glm models, and htest objects cleanly", {
+  df <- data.frame(
+    a = c(1, 2, NA),
+    party = factor(c("Dem", "Ind", "Rep"), levels = c("Dem", "Ind", "Rep"))
+  )
+  attr(df$a, "label") <- "Respondent Trust Score (1-7)"
+  attr(df$a, "labels") <- c("Low Trust" = 1, "High Trust" = 7)
+
   df_desc <- describe_object(df, "my_df")
   expect_true(any(grepl("my_df: <data.frame [3 rows x 2 cols]>", df_desc, fixed = TRUE)))
   expect_true(any(grepl("Missing values (NAs): a=1", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("Factor Levels:", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("party: 'Dem', 'Ind', 'Rep'", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("Survey Variable & Value Labels", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("Respondent Trust Score (1-7)", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("1='Low Trust'", df_desc, fixed = TRUE)))
 
   fit <- lm(mpg ~ wt + hp, data = mtcars)
   fit_desc <- describe_object(fit, "mpg_model")
   expect_true(any(grepl("mpg_model: <lm> formula: mpg ~ wt + hp", fit_desc, fixed = TRUE)))
   expect_true(any(grepl("wt", fit_desc, fixed = TRUE)))
+
+  glm_fit <- glm(am ~ wt, data = mtcars, family = binomial(link = "logit"))
+  glm_desc <- describe_object(glm_fit, "am_logit")
+  expect_true(any(grepl("family: binomial(link = 'logit')", glm_desc, fixed = TRUE)))
+
+  ttest_obj <- t.test(mpg ~ am, data = mtcars)
+  ttest_desc <- describe_object(ttest_obj, "mpg_ttest")
+  expect_true(any(grepl("mpg_ttest: <htest>", ttest_desc, fixed = TRUE)))
+  expect_true(any(grepl("Welch Two Sample t-test", ttest_desc, fixed = TRUE)))
 })
 
 test_that("capture_error_context captures base R errors like iris[1:232] without being overwritten by rlang::last_error()", {

@@ -541,6 +541,10 @@ api_post_apply <- function(body) {
   if (identical(mode, "replace")) {
     rstudioapi::modifyRange(location = sel$range, text = code_to_write, id = ctx$id)
     msg <- "Replaced selection in script (Undo available)"
+  } else if (identical(mode, "prefix")) {
+    insert_pos <- sel$range$start
+    rstudioapi::insertText(location = insert_pos, text = paste0(code_to_write, "\n"), id = ctx$id)
+    msg <- "Inserted before selection in script (Undo available)"
   } else {
     insert_pos <- sel$range$end
     rstudioapi::insertText(location = insert_pos, text = paste0("\n", code_to_write), id = ctx$id)
@@ -1092,7 +1096,8 @@ function renderMessages(messages) {
   box.innerHTML = messages.map((m) => {
     if (m.auto_open_diff) autoOpenLastDiff = true;
     const cls = m.role === "user" ? "rc-msg rc-msg-user" : "rc-msg rc-msg-assistant";
-    return `<div class="${cls}">${m.html}</div>`;
+    const prefAttr = m.preferred_mode ? ` data-preferred-mode="${m.preferred_mode}"` : "";
+    return `<div class="${cls}"${prefAttr}>${m.html}</div>`;
   }).join("");
 
   enhanceCodeBlocks(autoOpenLastDiff);
@@ -1107,23 +1112,45 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     const codeEl = pre.querySelector("code");
     const rawCode = codeEl ? codeEl.innerText : pre.innerText;
     const clsName = (codeEl && codeEl.className) ? codeEl.className.toLowerCase() : "";
-    const langLabel = clsName.includes("yaml") ? "YAML (SKILL.md)" : "R Code";
+    const isYaml = clsName.includes("yaml");
+    const langLabel = isYaml ? "YAML (SKILL.md)" : "R Code";
+    const msgContainer = pre.closest(".rc-msg-assistant");
+    const preferredMode = msgContainer ? (msgContainer.getAttribute("data-preferred-mode") || "") : "";
 
     const wrapper = document.createElement("div");
     wrapper.className = "rc-code-wrapper";
 
     const toolbar = document.createElement("div");
     toolbar.className = "rc-code-toolbar";
-    toolbar.innerHTML = `
-      <span class="rc-code-lang">${langLabel}</span>
-      <div class="rc-code-actions">
-        <button class="rc-code-btn rc-code-btn-console" data-action="console" data-idx="${idx}" title="Execute directly in the R Console without modifying your script">Run in Console</button>
-        <button class="rc-code-btn rc-code-btn-diff" data-idx="${idx}" title="Compare proposed code against highlighted selection">Preview Difference</button>
-        <button class="rc-code-btn rc-code-btn-primary" data-mode="replace" data-idx="${idx}">Replace</button>
-        <button class="rc-code-btn" data-mode="insert" data-idx="${idx}" title="Insert at cursor in active script">Insert in Script</button>
-        <button class="rc-code-btn" data-action="copy" data-idx="${idx}" title="Copy code to clipboard">Copy</button>
-      </div>
-    `;
+    if (isYaml) {
+      toolbar.innerHTML = `
+        <span class="rc-code-lang">${langLabel}</span>
+        <div class="rc-code-actions">
+          <button class="rc-code-btn rc-code-btn-primary" data-action="apply_skill" data-idx="${idx}" title="Load this YAML directly into your SKILL.md Settings editor">Load into SKILL.md</button>
+          <button class="rc-code-btn" data-action="copy" data-idx="${idx}" title="Copy YAML to clipboard">Copy</button>
+        </div>
+      `;
+    } else {
+      const insertBeforeBtn = preferredMode === "prefix"
+        ? `<button class="rc-code-btn rc-code-btn-primary" data-mode="prefix" data-idx="${idx}" title="Insert before highlighted selection in active script">Insert Before</button>`
+        : "";
+      const insertAfterClass = preferredMode === "suffix" ? "rc-code-btn rc-code-btn-primary" : "rc-code-btn";
+      const insertAfterLabel = preferredMode === "suffix" ? "Insert After" : "Insert in Script";
+      const replaceClass = (preferredMode === "prefix" || preferredMode === "suffix")
+        ? "rc-code-btn"
+        : "rc-code-btn rc-code-btn-primary";
+      toolbar.innerHTML = `
+        <span class="rc-code-lang">${langLabel}</span>
+        <div class="rc-code-actions">
+          <button class="rc-code-btn rc-code-btn-console" data-action="console" data-idx="${idx}" title="Execute directly in the R Console without modifying your script">Run in Console</button>
+          <button class="rc-code-btn rc-code-btn-diff" data-idx="${idx}" title="Compare proposed code against highlighted selection">Preview Difference</button>
+          ${insertBeforeBtn}
+          <button class="${replaceClass}" data-mode="replace" data-idx="${idx}">Replace</button>
+          <button class="${insertAfterClass}" data-mode="insert" data-idx="${idx}" title="Insert after cursor/selection in active script">${insertAfterLabel}</button>
+          <button class="rc-code-btn" data-action="copy" data-idx="${idx}" title="Copy code to clipboard">Copy</button>
+        </div>
+      `;
+    }
     toolbar.addEventListener("mouseenter", refreshSelectionState);
 
     const diffDrawer = document.createElement("div");
@@ -1136,50 +1163,73 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     wrapper.appendChild(diffDrawer);
 
     const diffBtn = toolbar.querySelector(".rc-code-btn-diff");
-    diffBtn.addEventListener("click", async () => {
-      if (diffDrawer.classList.contains("open")) {
-        diffDrawer.classList.remove("open");
-        return;
-      }
-      diffDrawer.innerHTML = `<div style="color:#64748b; padding:4px;">Computing difference against active selection...</div>`;
-      diffDrawer.classList.add("open");
-      diffDrawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (diffBtn) {
+      diffBtn.addEventListener("click", async () => {
+        if (diffDrawer.classList.contains("open")) {
+          diffDrawer.classList.remove("open");
+          return;
+        }
+        diffDrawer.innerHTML = `<div style="color:#64748b; padding:4px;">Computing difference against active selection...</div>`;
+        diffDrawer.classList.add("open");
+        diffDrawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-      const res = await fetch("/api/diff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: rawCode.trim() })
+        const res = await fetch("/api/diff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: rawCode.trim() })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          updateReplaceButtonsState(data.has_selection);
+          const hdr = data.has_selection
+            ? `<span>Red = Current Selection | Green = Proposed</span>`
+            : `<span>Nothing highlighted in editor (showing proposed code)</span>`;
+          diffDrawer.innerHTML = `
+            <div class="rc-diff-header">
+              ${hdr}
+              <button class="btn-icon" onclick="this.closest(\'.rc-inline-diff\').classList.remove(\'open\')">Close</button>
+            </div>
+            ${data.diff_html}
+          `;
+          setTimeout(() => {
+            diffDrawer.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 40);
+        }
       });
-      const data = await res.json();
-      if (data.ok) {
-        updateReplaceButtonsState(data.has_selection);
-        const hdr = data.has_selection
-          ? `<span>Red = Current Selection | Green = Proposed</span>`
-          : `<span>Nothing highlighted in editor (showing proposed code)</span>`;
-        diffDrawer.innerHTML = `
-          <div class="rc-diff-header">
-            ${hdr}
-            <button class="btn-icon" onclick="this.closest(\'.rc-inline-diff\').classList.remove(\'open\')">Close</button>
-          </div>
-          ${data.diff_html}
-        `;
-        setTimeout(() => {
-          diffDrawer.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 40);
-      }
-    });
+    }
+
+    // Load into SKILL.md button handler for YAML blocks
+    const skillBtn = toolbar.querySelector(\'[data-action="apply_skill"]\');
+    if (skillBtn) {
+      skillBtn.addEventListener("click", async () => {
+        await toggleSettings();
+        const box = document.getElementById("cfg_skill_text");
+        if (box) {
+          box.value = rawCode.trim();
+          box.focus();
+        }
+        const st = document.getElementById("settings_status");
+        if (st) {
+          st.textContent = "Loaded YAML into SKILL.md! Click Save & Apply (or Save to Disk).";
+        }
+      });
+    }
 
     // Run in Console button handler
     const consoleBtn = toolbar.querySelector(\'[data-action="console"]\');
-    consoleBtn.addEventListener("click", async () => {
-      await runInConsole(rawCode.trim(), consoleBtn);
-    });
+    if (consoleBtn) {
+      consoleBtn.addEventListener("click", async () => {
+        await runInConsole(rawCode.trim(), consoleBtn);
+      });
+    }
 
     // Copy button handler (uses robust textarea + R clipboard fallback)
     const copyBtn = toolbar.querySelector(\'[data-action="copy"]\');
-    copyBtn.addEventListener("click", async () => {
-      await copyTextRobust(rawCode.trim(), copyBtn);
-    });
+    if (copyBtn) {
+      copyBtn.addEventListener("click", async () => {
+        await copyTextRobust(rawCode.trim(), copyBtn);
+      });
+    }
 
     // Script Replace / Insert handlers
     toolbar.querySelectorAll("[data-mode]").forEach(btn => {
@@ -1191,7 +1241,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     });
 
     // If triggered from converser_inline() with "Preview Difference first", auto-open the diff drawer!
-    if (autoOpenLastDiff && idx === pres.length - 1) {
+    if (autoOpenLastDiff && idx === pres.length - 1 && diffBtn) {
       setTimeout(() => diffBtn.click(), 80);
     }
   });
@@ -1506,8 +1556,8 @@ async function sendPromptInternal(promptText, incErr, incPlot) {
   const emptyEl = box.querySelector(".rc-empty");
   if (emptyEl) emptyEl.remove();
 
-  box.innerHTML += `<div class="rc-msg rc-msg-user"><p>${escapeHtml(promptText)}</p></div>`;
-  box.innerHTML += `<div class="rc-msg rc-msg-assistant" id="temp_thinking"><span class="rc-spinner"></span>Thinking...</div>`;
+  box.insertAdjacentHTML("beforeend", `<div class="rc-msg rc-msg-user"><p>${escapeHtml(promptText)}</p></div>`);
+  box.insertAdjacentHTML("beforeend", `<div class="rc-msg rc-msg-assistant" id="temp_thinking"><span class="rc-spinner"></span>Thinking...</div>`);
   box.scrollTop = box.scrollHeight;
   setStatus(\'<span class="rc-spinner"></span>Thinking...\');
 
@@ -1528,12 +1578,27 @@ async function sendPromptInternal(promptText, incErr, incPlot) {
       renderMessages(data.messages || []);
       setStatus("Ready");
     } else {
-      setStatus(data.error || "Error");
+      const errMsg = data.error || "An error occurred while communicating with OpenRouter.";
+      const tempEl = document.getElementById("temp_thinking");
+      if (tempEl) {
+        const needsKey = errMsg.toLowerCase().includes("api key") || errMsg.toLowerCase().includes("settings");
+        const keyBtn = needsKey
+          ? ` <button class="btn-icon" style="margin-left:6px; border-color:#dc2626; color:#dc2626;" onclick="toggleSettings()">Open Settings</button>`
+          : "";
+        tempEl.innerHTML = `<div style="color:#dc2626; font-weight:500;">${escapeHtml(errMsg)}${keyBtn}</div>`;
+        tempEl.removeAttribute("id");
+      }
+      setStatus(errMsg);
     }
   } catch (e) {
     if (e && e.name === "AbortError") {
       setStatus("Stopped");
     } else {
+      const tempEl = document.getElementById("temp_thinking");
+      if (tempEl) {
+        tempEl.innerHTML = `<div style="color:#dc2626;">Connection error: ${escapeHtml((e && e.message) ? e.message : "Could not reach R server.")}</div>`;
+        tempEl.removeAttribute("id");
+      }
       setStatus("Error");
     }
   } finally {
