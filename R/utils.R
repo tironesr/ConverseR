@@ -86,9 +86,15 @@ converser_save_config <- function(settings = NULL, api_key = NULL) {
       }
     }
   }
-  if (!is.null(api_key) && nzchar(trimws(api_key))) {
-    current$openrouter_api_key <- trimws(api_key)
-    Sys.setenv(OPENROUTER_API_KEY = trimws(api_key))
+  if (!is.null(api_key)) {
+    clean_key <- trimws(api_key)
+    current$openrouter_api_key <- clean_key
+    converser_env[["saved_api_key"]] <- clean_key
+    if (nzchar(clean_key)) {
+      Sys.setenv(OPENROUTER_API_KEY = clean_key)
+    } else {
+      Sys.unsetenv("OPENROUTER_API_KEY")
+    }
   }
 
   cfg_file <- converser_config_path()
@@ -133,8 +139,10 @@ converser_load_saved_config <- function(quiet = FALSE, init_chat = TRUE) {
     return(invisible(FALSE))
   }
 
-  if (!is.null(saved$openrouter_api_key) && nzchar(trimws(saved$openrouter_api_key))) {
-    Sys.setenv(OPENROUTER_API_KEY = trimws(saved$openrouter_api_key))
+  saved_key <- trimws(saved$openrouter_api_key %||% "")
+  converser_env[["saved_api_key"]] <- saved_key
+  if (nzchar(saved_key)) {
+    Sys.setenv(OPENROUTER_API_KEY = saved_key)
   }
 
   options(converser.style = "")
@@ -159,7 +167,7 @@ converser_load_saved_config <- function(quiet = FALSE, init_chat = TRUE) {
     allow_fallbacks = if (is.null(saved$allow_fallbacks)) TRUE else isTRUE(saved$allow_fallbacks)
   )
 
-  if (isTRUE(init_chat) && nzchar(Sys.getenv("OPENROUTER_API_KEY", ""))) {
+  if (isTRUE(init_chat) && nzchar(saved_key)) {
     suppressWarnings(
       tryCatch(
         converser_use_openrouter(
@@ -171,6 +179,7 @@ converser_load_saved_config <- function(quiet = FALSE, init_chat = TRUE) {
           system_prompt = saved$system_prompt,
           skill_text = getOption("converser.skill_text"),
           skill_file = saved$skill_file,
+          api_key = saved_key,
           persist = FALSE
         ),
         error = function(e) NULL
@@ -226,8 +235,14 @@ converser_config <- function(
   enable_tools = NULL,
   persist = FALSE
 ) {
-  if (!is.null(openrouter_api_key) && nzchar(trimws(openrouter_api_key))) {
-    Sys.setenv(OPENROUTER_API_KEY = trimws(openrouter_api_key))
+  if (!is.null(openrouter_api_key)) {
+    clean_key <- trimws(openrouter_api_key)
+    converser_env[["saved_api_key"]] <- clean_key
+    if (nzchar(clean_key)) {
+      Sys.setenv(OPENROUTER_API_KEY = clean_key)
+    } else {
+      Sys.unsetenv("OPENROUTER_API_KEY")
+    }
   }
 
   opts <- list()
@@ -332,8 +347,14 @@ converser_use_openrouter <- function(
 ) {
   data_collection <- arg_match(data_collection)
 
-  if (!is.null(api_key) && nzchar(trimws(api_key))) {
-    Sys.setenv(OPENROUTER_API_KEY = trimws(api_key))
+  if (!is.null(api_key)) {
+    clean_key <- trimws(api_key)
+    converser_env[["saved_api_key"]] <- clean_key
+    if (nzchar(clean_key)) {
+      Sys.setenv(OPENROUTER_API_KEY = clean_key)
+    } else {
+      Sys.unsetenv("OPENROUTER_API_KEY")
+    }
   }
 
   provider_cfg <- list(
@@ -373,13 +394,18 @@ converser_use_openrouter <- function(
     allow_fallbacks = isTRUE(allow_fallbacks)
   )
 
-  chat <- suppressWarnings(
-    ellmer::chat_openrouter(
-      model = model,
-      api_args = api_args,
-      system_prompt = if (!is.null(system_prompt) && nzchar(trimws(system_prompt))) system_prompt else "You are an expert R programmer."
+  active_key <- converser_env[["saved_api_key"]] %||% ""
+  chat <- NULL
+  if (nzchar(active_key)) {
+    chat <- suppressWarnings(
+      ellmer::chat_openrouter(
+        model = model,
+        api_key = active_key,
+        api_args = api_args,
+        system_prompt = if (!is.null(system_prompt) && nzchar(trimws(system_prompt))) system_prompt else "You are an expert R programmer."
+      )
     )
-  )
+  }
 
   options(converser.chat = chat, gander.chat = chat)
   converser_env[["active_chat"]] <- NULL
@@ -665,11 +691,12 @@ inspect_current_settings <- function(include_api_key = TRUE) {
     allow_fallbacks <- isTRUE(saved$allow_fallbacks)
   }
 
-  api_key_val <- if (isTRUE(include_api_key)) Sys.getenv("OPENROUTER_API_KEY", "") else ""
+  explicit_key <- converser_env[["saved_api_key"]] %||% ""
+  api_key_val <- if (isTRUE(include_api_key)) explicit_key else ""
 
   list(
     openrouter_api_key = api_key_val,
-    has_api_key = nzchar(Sys.getenv("OPENROUTER_API_KEY", "")),
+    has_api_key = nzchar(explicit_key),
     model = model,
     reasoning_effort = reasoning_effort,
     zdr = zdr,
@@ -748,7 +775,7 @@ get_converser_chat <- function(register_tools = TRUE) {
     getOption("gander.chat", getOption(".gander_chat"))
   )
 
-  # If no chat option is set yet, try loading saved user config or initializing OpenRouter if key is present
+  # If no chat option is set yet, try loading saved user config
   if (is.null(chat_opt)) {
     converser_load_saved_config(quiet = TRUE, init_chat = TRUE)
     chat_opt <- getOption(
@@ -757,7 +784,8 @@ get_converser_chat <- function(register_tools = TRUE) {
     )
   }
 
-  if (is.null(chat_opt) && nzchar(Sys.getenv("OPENROUTER_API_KEY", ""))) {
+  explicit_key <- converser_env[["saved_api_key"]] %||% ""
+  if (is.null(chat_opt) && nzchar(explicit_key)) {
     saved <- converser_env[["openrouter_settings"]] %||% list()
     chat_opt <- tryCatch(
       converser_use_openrouter(
@@ -765,7 +793,8 @@ get_converser_chat <- function(register_tools = TRUE) {
         reasoning_effort = saved$reasoning_effort %||% "low",
         zdr = if (is.null(saved$zdr)) TRUE else isTRUE(saved$zdr),
         data_collection = saved$data_collection %||% "deny",
-        allow_fallbacks = if (is.null(saved$allow_fallbacks)) TRUE else isTRUE(saved$allow_fallbacks)
+        allow_fallbacks = if (is.null(saved$allow_fallbacks)) TRUE else isTRUE(saved$allow_fallbacks),
+        api_key = explicit_key
       ),
       error = function(e) NULL
     )

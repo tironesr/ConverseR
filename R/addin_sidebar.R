@@ -72,7 +72,12 @@ converser_stop_sidebar <- function() {
 
 ensure_nonblocking_server <- function() {
   existing_srv <- converser_env[["httpuv_server"]]
-  if (!is.null(existing_srv)) {
+  existing_port <- converser_env[["httpuv_port"]]
+  if (!is.null(existing_srv) && !is.null(existing_port)) {
+    still_running <- tryCatch(existing_srv$isRunning(), error = function(e) FALSE)
+    if (isTRUE(still_running)) {
+      return(sprintf("http://127.0.0.1:%d/", existing_port))
+    }
     tryCatch(httpuv::stopServer(existing_srv), error = function(e) NULL)
   }
 
@@ -86,7 +91,7 @@ ensure_nonblocking_server <- function() {
   converser_env[["httpuv_server"]] <- srv
   converser_env[["httpuv_port"]] <- port
 
-  sprintf("http://127.0.0.1:%d/?t=%d", port, as.integer(Sys.time()))
+  sprintf("http://127.0.0.1:%d/", port)
 }
 
 get_safe_editor_context <- function() {
@@ -253,9 +258,6 @@ api_get_state <- function() {
 
 api_post_save_settings <- function(body) {
   api_key <- trimws(body$openrouter_api_key %||% "")
-  if (nzchar(api_key)) {
-    Sys.setenv(OPENROUTER_API_KEY = api_key)
-  }
 
   model <- trimws(body$model %||% "deepseek/deepseek-v4.1-flash")
   if (!nzchar(model)) model <- "deepseek/deepseek-v4.1-flash"
@@ -284,7 +286,7 @@ api_post_save_settings <- function(body) {
     system_prompt = system_prompt,
     skill_text = skill_text,
     skill_file = if (nzchar(skill_file)) skill_file else NULL,
-    api_key = if (nzchar(api_key)) api_key else NULL,
+    api_key = api_key,
     persist = persist
   )
 
@@ -1053,16 +1055,26 @@ function updateReplaceButtonsState(hasSel) {
   });
 }
 
-setInterval(async () => {
-  if (isSending) return;
+let isCheckingSelection = false;
+let lastSelectionCheckMs = 0;
+
+async function refreshSelectionState() {
+  if (isSending || isCheckingSelection || document.visibilityState === "hidden") return;
+  const now = Date.now();
+  if (now - lastSelectionCheckMs < 800) return;
+  lastSelectionCheckMs = now;
+  isCheckingSelection = true;
   try {
     const res = await fetch("/api/selection");
     const data = await res.json();
     if (data.ok && data.has_selection !== hasEditorSelection) {
       updateReplaceButtonsState(data.has_selection);
     }
-  } catch (e) {}
-}, 1200);
+  } catch (e) {
+  } finally {
+    isCheckingSelection = false;
+  }
+}
 
 function renderMessages(messages) {
   const box = document.getElementById("chat_box");
@@ -1112,6 +1124,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
         <button class="rc-code-btn" data-action="copy" data-idx="${idx}" title="Copy code to clipboard">Copy</button>
       </div>
     `;
+    toolbar.addEventListener("mouseenter", refreshSelectionState);
 
     const diffDrawer = document.createElement("div");
     diffDrawer.className = "rc-inline-diff";
