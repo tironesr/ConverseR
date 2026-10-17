@@ -60,7 +60,7 @@ test_that("S3 describe_object summarizes data.frames (including survey labels & 
   expect_true(any(grepl("my_df: <data.frame [3 rows x 2 cols]>", df_desc, fixed = TRUE)))
   expect_true(any(grepl("Missing values (NAs): a=1", df_desc, fixed = TRUE)))
   expect_true(any(grepl("Factor Levels:", df_desc, fixed = TRUE)))
-  expect_true(any(grepl("party: 'Dem', 'Ind', 'Rep'", df_desc, fixed = TRUE)))
+  expect_true(any(grepl("party: ['Dem', 'Ind', 'Rep']", df_desc, fixed = TRUE)))
   expect_true(any(grepl("Survey Variable & Value Labels", df_desc, fixed = TRUE)))
   expect_true(any(grepl("Respondent Trust Score (1-7)", df_desc, fixed = TRUE)))
   expect_true(any(grepl("1='Low Trust'", df_desc, fixed = TRUE)))

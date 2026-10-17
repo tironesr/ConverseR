@@ -297,9 +297,9 @@ describe_object.data.frame <- function(x, name = "data.frame") {
       function(cn) {
         lvls <- levels(cols_subset[[cn]])
         if (length(lvls) > 10) {
-          lvl_str <- paste0(paste(shQuote(lvls[1:10]), collapse = ", "), sprintf(", ... (%d total)", length(lvls)))
+          lvl_str <- paste0(paste(paste0("'", lvls[1:10], "'"), collapse = ", "), sprintf(", ... (%d total)", length(lvls)))
         } else {
-          lvl_str <- paste(shQuote(lvls), collapse = ", ")
+          lvl_str <- paste(paste0("'", lvls, "'"), collapse = ", ")
         }
         sprintf("%s: [%s]", cn, lvl_str)
       },
@@ -320,11 +320,11 @@ describe_object.data.frame <- function(x, name = "data.frame") {
     if (has_var_lbl || has_val_lbls) {
       entry <- paste0("#>   ", cn, ": ")
       if (has_var_lbl) {
-        entry <- paste0(entry, shQuote(trimws(var_lbl)))
+        entry <- paste0(entry, "'", trimws(var_lbl), "'")
       }
       if (has_val_lbls) {
         vl_sub <- utils::head(val_lbls, 8L)
-        vl_str <- paste( paste0(unname(vl_sub), "=", shQuote(names(vl_sub))), collapse = ", ")
+        vl_str <- paste(paste0(unname(vl_sub), "='", names(vl_sub), "'"), collapse = ", ")
         if (length(val_lbls) > 8L) {
           vl_str <- paste0(vl_str, sprintf(", ... (%d codes)", length(val_lbls)))
         }
