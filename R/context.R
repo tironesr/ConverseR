@@ -242,7 +242,7 @@ fetch_env_context <- function(
     obj <- tryCatch(env_get(env, nm), error = function(e) NULL)
     if (is.null(obj)) next
 
-    obj_hash <- tryCatch(rlang::hash(obj), error = function(e) NA_character_)
+    obj_hash <- compute_object_hash(obj)
     if (isTRUE(cache_context) && !is.na(obj_hash) && identical(cached_hashes[[nm]], obj_hash)) {
       already_cached_names <- c(already_cached_names, nm)
       next
@@ -277,6 +277,16 @@ fetch_env_context <- function(
   }
 
   c("`````", combined, "`````")
+}
+
+compute_object_hash <- function(x) {
+  tryCatch(
+    {
+      raw_bytes <- serialize(x, connection = NULL, refhook = function(e) "env_ref")
+      rlang::hash(raw_bytes)
+    },
+    error = function(e) NA_character_
+  )
 }
 
 build_env_manifest <- function(obj_names, env = global_env(), max_manifest = 200L) {
