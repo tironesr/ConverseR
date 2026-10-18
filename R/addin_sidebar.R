@@ -400,6 +400,7 @@ api_post_chat <- function(body) {
 
   inc_err <- isTRUE(body$inc_err)
   inc_plot <- isTRUE(body$inc_plot)
+  force_whole_doc <- isTRUE(body$force_whole_doc)
 
   ctx <- get_safe_editor_context()
   chat <- converser_env[["active_chat"]] %||% get_converser_chat(register_tools = TRUE)
@@ -453,6 +454,7 @@ api_post_chat <- function(body) {
     context = ctx,
     include_env = TRUE,
     include_error = inc_err,
+    force_whole_doc = force_whole_doc,
     cache_context = TRUE
   )
 
@@ -496,6 +498,7 @@ api_post_chat <- function(body) {
                 context = ctx,
                 include_env = TRUE,
                 include_error = inc_err,
+                force_whole_doc = force_whole_doc,
                 cache_context = TRUE
               )
               res_fb <- fallback_chat$chat(fresh_turn, echo = "none")
@@ -849,6 +852,7 @@ sidebar_single_page_html <- function() {
 <div class="rc-bottom">
   <div class="rc-action-strip">
     <div class="rc-pills">
+      <button class="rc-pill-btn" id="full_doc_btn" onclick="toggleFullDoc()" title="Click to force sending the entire document (or mention keywords like in this document or all figures)">Full Script</button>
       <button class="rc-pill-btn" id="share_plot_btn" onclick="toggleSharePlot()" title="Toggle to attach your active R plot image to your next message">Share Plot</button>
       <button class="rc-pill-btn" onclick="quickAction(\'error\')" title="Diagnose &amp; fix the last R error">Fix Error</button>
     </div>
@@ -1061,6 +1065,18 @@ function toggleApiKeyVisibility() {
   } else {
     inp.type = "password";
     btn.textContent = "Show";
+  }
+}
+
+let fullDocAttached = false;
+function toggleFullDoc() {
+  fullDocAttached = !fullDocAttached;
+  const btn = document.getElementById("full_doc_btn");
+  if (btn) btn.classList.toggle("active", fullDocAttached);
+  if (fullDocAttached) {
+    setStatus("Full script mode active for your next message");
+  } else {
+    setStatus("Ready");
   }
 }
 
@@ -1576,10 +1592,14 @@ async function sendChat() {
   if (sharePlotAttached) {
     toggleSharePlot();
   }
-  await sendPromptInternal(text, false, attachPlot);
+  const forceDoc = fullDocAttached;
+  if (fullDocAttached) {
+    toggleFullDoc();
+  }
+  await sendPromptInternal(text, false, attachPlot, forceDoc);
 }
 
-async function sendPromptInternal(promptText, incErr, incPlot) {
+async function sendPromptInternal(promptText, incErr, incPlot, forceDoc = false) {
   if (isSending) return;
   setThinkingUI(true);
   currentAbortController = new AbortController();
@@ -1600,7 +1620,8 @@ async function sendPromptInternal(promptText, incErr, incPlot) {
       body: JSON.stringify({
         prompt: promptText,
         inc_err: !!incErr,
-        inc_plot: !!incPlot
+        inc_plot: !!incPlot,
+        force_whole_doc: !!forceDoc
       }),
       signal: currentAbortController.signal
     });

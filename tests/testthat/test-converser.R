@@ -274,3 +274,127 @@ test_that("expanded whole-document context (10,000 lines) and .GlobalEnv manifes
   expect_true(any(grepl("- [old L142] # figure code line 142", delta_out, fixed = TRUE)))
   expect_true(any(grepl("+ [new L142] xlab(\"Year (2010-2024)\")", delta_out, fixed = TRUE)))
 })
+
+test_that("detect_whole_document_intent accurately identifies whole-document audit prompts", {
+  # Positive matches
+  expect_true(ConverseR:::detect_whole_document_intent("Please audit this entire document for styling."))
+  expect_true(ConverseR:::detect_whole_document_intent("Check across the manuscript if all figures are consistent."))
+  expect_true(ConverseR:::detect_whole_document_intent("Are all models using the same covariates throughout the script?"))
+  expect_true(ConverseR:::detect_whole_document_intent("Review all chunks in this file"))
+  expect_true(ConverseR:::detect_whole_document_intent("Ensure theme_minimal is consistent across all plots"))
+
+  # Negative matches (localized queries)
+  expect_false(ConverseR:::detect_whole_document_intent("How do I filter rows where x > 5?"))
+  expect_false(ConverseR:::detect_whole_document_intent("Fix the syntax error on line 42"))
+  expect_false(ConverseR:::detect_whole_document_intent("What is the p-value of this test?"))
+  expect_false(ConverseR:::detect_whole_document_intent(""))
+  expect_false(ConverseR:::detect_whole_document_intent(NULL))
+})
+
+test_that("extract_active_chunk_or_window extracts enclosing chunk in Quarto/Rmd and 250-line window in .R", {
+  qmd_doc <- c(
+    "---",
+    "title: \"Research Paper\"",
+    "author: \"Jane Doe\"",
+    "---",
+    "",
+    "library(ggplot2)",
+    "library(dplyr)",
+    "",
+    "# Section 1",
+    "```{r chunk-setup}",
+    "data_path <- 'raw_data.csv'",
+    "```",
+    "",
+    "# Section 2",
+    "```{r chunk-model}",
+    "# Cursor is here on line 16",
+    "fit <- lm(mpg ~ wt + hp, data = mtcars)",
+    "summary(fit)",
+    "```",
+    "",
+    "# Section 3",
+    "```{r chunk-plot}",
+    "ggplot(mtcars, aes(wt, mpg)) + geom_point()",
+    "```"
+  )
+
+  # When cursor is on line 16 (inside chunk-model)
+  extracted <- ConverseR:::extract_active_chunk_or_window(qmd_doc, cursor_line = 16L, ext = "qmd")
+  extracted_str <- paste(extracted, collapse = "\n")
+
+  # Includes YAML frontmatter and imports from top of document
+  expect_true(grepl("title: \"Research Paper\"", extracted_str, fixed = TRUE))
+  expect_true(grepl("library(ggplot2)", extracted_str, fixed = TRUE))
+  expect_true(grepl("library(dplyr)", extracted_str, fixed = TRUE))
+
+  # Includes active chunk-model
+  expect_true(grepl("```{r chunk-model}", extracted_str, fixed = TRUE))
+  expect_true(grepl("fit <- lm(mpg ~ wt + hp, data = mtcars)", extracted_str, fixed = TRUE))
+  expect_true(grepl("summary(fit)", extracted_str, fixed = TRUE))
+
+  # Does NOT include other chunks
+  expect_false(grepl("data_path <- 'raw_data.csv'", extracted_str, fixed = TRUE))
+  expect_false(grepl("ggplot(mtcars, aes(wt, mpg))", extracted_str, fixed = TRUE))
+
+  # In plain .R file with 500 lines: window centered at 300 with backup_window = 125 gives 251 lines + 2 omission markers
+  r_script <- paste0("line_", seq_len(500))
+  r_extracted <- ConverseR:::extract_active_chunk_or_window(r_script, cursor_line = 300L, ext = "r", backup_window = 125L)
+  expect_length(r_extracted, 253L)
+  expect_equal(r_extracted[1], "# [... omitted lines 1 to 174 ...]")
+  expect_equal(r_extracted[2], "line_175")
+  expect_equal(r_extracted[252], "line_425")
+  expect_equal(r_extracted[253], "# [... omitted lines 426 to 500 ...]")
+})
+
+test_that("fetch_env_context caps unmentioned objects to top 2-3 active datasets/models (Option E1)", {
+  ConverseR:::converser_clear_context_cache()
+  on.exit(ConverseR:::converser_clear_context_cache(), add = TRUE)
+
+  # Create an environment with 6 objects: 4 data frames, 1 model, 1 scalar
+  test_env <- rlang::new_environment(list(
+    df1 = data.frame(a = 1:5),
+    df2 = data.frame(b = 1:5),
+    df3 = data.frame(c = 1:5),
+    df4 = data.frame(d = 1:5),
+    m1 = lm(mpg ~ wt, data = mtcars),
+    n_sample = 500L
+  ))
+
+  # Query that does NOT mention any specific object:
+  # Full manifest should list all 6 objects
+  # But detailed summaries should be capped at at most 3 unmentioned objects!
+  ctx <- ConverseR:::fetch_env_context(
+    selection = "",
+    input = "Can you help me write some code?",
+    env = test_env,
+    include_all = TRUE,
+    cache_context = FALSE
+  )
+  ctx_str <- paste(ctx, collapse = "\n")
+
+  # Full manifest lists all 6
+  expect_true(grepl("Global Environment (.GlobalEnv) Manifest (6 total objects):", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - df1: <data.frame", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - df2: <data.frame", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - df3: <data.frame", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - df4: <data.frame", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - m1: <lm>", ctx_str, fixed = TRUE))
+  expect_true(grepl("# - n_sample: <integer (len=1)>", ctx_str, fixed = TRUE))
+
+  # Count detailed object descriptions (which start with '# name: <', unlike manifest lines '# - name: <')
+  detailed_lines <- grep("^# [a-zA-Z0-9_]+: <", ctx, value = TRUE)
+  expect_lte(length(detailed_lines), 3L)
+
+  # When the user explicitly mentions df4:
+  ctx_mention <- ConverseR:::fetch_env_context(
+    selection = "",
+    input = "Can you clean df4 for me?",
+    env = test_env,
+    include_all = TRUE,
+    cache_context = FALSE
+  )
+  ctx_mention_str <- paste(ctx_mention, collapse = "\n")
+  expect_true(grepl("# df4: <data.frame [5 rows x 1 cols]>", ctx_mention_str, fixed = TRUE))
+})
+

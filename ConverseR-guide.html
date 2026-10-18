@@ -340,6 +340,7 @@
 
     <div class="nav-group-title">Workflows</div>
     <a class="nav-link" href="#sidebar">5. Using the Sidebar</a>
+    <a class="nav-link" href="#context-efficiency" style="padding-left: 20px; font-size: 12.5px;">&rdquor; Context &amp; Full Script</a>
     <a class="nav-link" href="#inline">6. Inline Code Edits</a>
     <a class="nav-link" href="#plots-errors">7. Sharing Plots &amp; Fixing Errors</a>
 
@@ -525,6 +526,34 @@ converser_use_openrouter(
         <li><strong>Copy:</strong> Copies the code block to your clipboard.</li>
       </ul>
       <p>To revert the most recent script edit made by ConverseR, click <strong>Undo</strong> in the Sidebar header or run <code>converser_undo()</code>.</p>
+
+      <div id="context-efficiency">
+        <h3>Smart Context, Token Efficiency &amp; The "Full Script" Button</h3>
+        <p>
+          ConverseR uses an intelligent windowing architecture that balances comprehensive codebase understanding with ultra-low token consumption:
+        </p>
+        <ul>
+          <li>
+            <strong>Chunk-Level Context by Default:</strong> In Quarto (<code>.qmd</code>) and RMarkdown (<code>.Rmd</code>) documents, ConverseR isolates the active code chunk enclosing your cursor (<code>```{r ...} ... ```</code>) along with document YAML frontmatter and library imports. In plain <code>.R</code> scripts, it uses a 250-line focused window centered on your cursor (&plusmn;125 lines).
+          </li>
+          <li>
+            <strong>The "Full Script" Toggle Button:</strong> When you need the assistant to analyze your entire file from top to bottom, click the <strong>Full Script</strong> toggle button (located in the action strip next to <em>Share Plot</em>). When enabled, it lights up in bright blue and displays <em>"Full Script Attached"</em>.
+          </li>
+          <li>
+            <strong>Automatic Keyword Escalation:</strong> Even if <em>Full Script</em> is turned off, ConverseR automatically detects document-wide intent in your prompt! If your message contains keywords or phrases requesting broader inspection:
+            <div class="callout" style="margin: 8px 0; padding: 10px 14px; font-size: 13px;">
+              <code>"in this document"</code> &bull; <code>"entire script"</code> &bull; <code>"whole file"</code> &bull; <code>"all figures"</code> &bull; <code>"all chunks"</code> &bull; <code>"all models"</code> &bull; <code>"across the document"</code> &bull; <code>"across the manuscript"</code> &bull; <code>"audit"</code> &bull; <code>"check all"</code> &bull; <code>"consistent"</code>
+            </div>
+            ConverseR will automatically escalate and attach your complete document for that turn.
+          </li>
+          <li>
+            <strong>Incremental Caching:</strong> When continuing a conversation about an open document, ConverseR sends only the line-level edits (diffs) rather than re-transmitting thousands of lines of identical code on every turn.
+          </li>
+          <li>
+            <strong>Environment Capping (<code>.GlobalEnv</code>):</strong> ConverseR maintains a lightweight manifest of all variables in your R workspace, but restricts deep multi-line column breakdowns and model coefficient tables strictly to objects explicitly mentioned in your prompt plus the top 2–3 active datasets or models.
+          </li>
+        </ul>
+      </div>
     </section>
 
     <!-- 6. INLINE EDITS -->
@@ -539,6 +568,9 @@ converser_use_openrouter(
         </li>
         <li>Type your instruction and press <span class="kbd">Enter</span> (or click <strong>Generate</strong>).</li>
       </ol>
+      <div class="callout" style="margin-top: 14px;">
+        <strong>Laser-Focused Execution:</strong> <code>converser_inline()</code> is engineered specifically for fast, targeted edits. It operates strictly within your active Quarto/RMarkdown chunk (or the &plusmn;125-line backup window), ensuring immediate response times and negligible token usage.
+      </div>
     </section>
 
     <!-- 7. PLOTS & ERRORS -->

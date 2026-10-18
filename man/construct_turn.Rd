@@ -9,6 +9,7 @@ construct_turn(
   context = NULL,
   include_env = TRUE,
   include_error = FALSE,
+  force_whole_doc = FALSE,
   window_lines = get_converser_window(),
   cache_context = FALSE
 )
@@ -22,7 +23,9 @@ construct_turn(
 
 \item{include_error}{Logical; whether to attach the most recent R error & backtrace.}
 
-\item{window_lines}{Number of surrounding code lines to include (default \code{5000L}).}
+\item{force_whole_doc}{Logical; whether to explicitly force whole-document mode.}
+
+\item{window_lines}{Number of surrounding code lines to include when whole-document is requested (default \code{5000L}).}
 
 \item{cache_context}{Logical; whether to deduplicate unchanged document and \code{.GlobalEnv}
 objects across multi-turn conversation calls using \code{rlang::hash()}.}

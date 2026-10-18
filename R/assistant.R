@@ -135,7 +135,8 @@ construct_system_prompt <- function(
 #' @param context RStudio document context.
 #' @param include_env Logical; whether to automatically attach `.GlobalEnv` manifest and summaries.
 #' @param include_error Logical; whether to attach the most recent R error & backtrace.
-#' @param window_lines Number of surrounding code lines to include (default `5000L`).
+#' @param force_whole_doc Logical; whether to explicitly force whole-document mode.
+#' @param window_lines Number of surrounding code lines to include when whole-document is requested (default `5000L`).
 #' @param cache_context Logical; whether to deduplicate unchanged document and `.GlobalEnv`
 #'   objects across multi-turn conversation calls using `rlang::hash()`.
 #' @keywords internal
@@ -144,11 +145,14 @@ construct_turn <- function(
   context = NULL,
   include_env = TRUE,
   include_error = FALSE,
+  force_whole_doc = FALSE,
   window_lines = get_converser_window(),
   cache_context = FALSE
 ) {
   code_ctx <- fetch_code_context(
     context,
+    prompt = user_prompt,
+    force_whole_doc = force_whole_doc,
     window_lines = window_lines,
     cache_context = cache_context
   )

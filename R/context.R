@@ -1,25 +1,122 @@
-# Code & Environment Context Extraction (Expanded + Hash-Cached) --------------
+#' Detect if the user's prompt expresses intent to inspect the whole document/script
+#' @keywords internal
+detect_whole_document_intent <- function(prompt) {
+  if (is.null(prompt) || !is.character(prompt) || length(prompt) == 0 || !nzchar(trimws(prompt))) {
+    return(FALSE)
+  }
+  p <- tolower(trimws(prompt))
+  patterns <- c(
+    "\\b(entire|whole|all|full)\\s+(document|script|file|manuscript|qmd|rmd|code|codebase)\\b",
+    "\\b(in|across|throughout)\\s+(this|the)\\s+(document|script|file|manuscript)\\b",
+    "\\b(all|every|across)\\s+(figures?|plots?|chunks?|models?|tables?|functions?)\\b",
+    "\\b(consisten(t|cy)|audit|review|scan|check)\\s+.*\\b(document|script|file|figures?|plots?)\\b",
+    "\\b(throughout|across)\\s+the\\s+(entire|whole|full)\\b"
+  )
+  any(vapply(patterns, function(pat) grepl(pat, p, perl = TRUE), logical(1)))
+}
+
+#' Extract active Quarto/RMarkdown code chunk or 250-line backup window
+#' @keywords internal
+extract_active_chunk_or_window <- function(contents, cursor_line = 1L, ext = "r", backup_window = 125L) {
+  n_total <- length(contents)
+  if (n_total == 0 || (n_total == 1 && identical(contents, ""))) {
+    return(character(0))
+  }
+
+  cursor_line <- max(1L, min(as.integer(cursor_line), n_total))
+
+  # If in Quarto (.qmd) or RMarkdown (.rmd), attempt to detect enclosing code chunk
+  if (ext %in% c("qmd", "rmd")) {
+    chunk_open_pattern <- "^```\\{[a-zA-Z0-9_-]+.*\\}\\s*$"
+    chunk_close_pattern <- "^```\\s*$"
+
+    open_lines <- which(grepl(chunk_open_pattern, contents))
+    prior_opens <- open_lines[open_lines <= cursor_line]
+
+    if (length(prior_opens) > 0) {
+      chunk_start <- max(prior_opens)
+      close_lines <- which(grepl(chunk_close_pattern, contents))
+      following_closes <- close_lines[close_lines > chunk_start]
+
+      if (length(following_closes) > 0) {
+        chunk_end <- min(following_closes)
+        if (cursor_line <= chunk_end) {
+          # Cursor is inside this chunk! Extract chunk + top packages/YAML header
+          chunk_lines <- contents[chunk_start:chunk_end]
+
+          header_lines <- character(0)
+          if (chunk_start > 1L) {
+            pre_lines <- contents[seq_len(chunk_start - 1L)]
+            yaml_lines <- character(0)
+            if (grepl("^---\\s*$", pre_lines[1])) {
+              end_yaml <- which(grepl("^(---|\\.\\.\\.)\\s*$", pre_lines[-1]))
+              if (length(end_yaml) > 0 && (end_yaml[1] + 1L) <= min(length(pre_lines), 40L)) {
+                yaml_lines <- pre_lines[seq_len(end_yaml[1] + 1L)]
+              }
+            }
+            pkg_lines <- grep("^\\s*(library|require|source|box::use)\\s*\\(", pre_lines, value = TRUE)
+            preserved <- c(yaml_lines, unique(pkg_lines))
+            if (length(preserved) > 0) {
+              header_lines <- c(
+                "# [Document Header / Packages loaded earlier in file]:",
+                preserved,
+                sprintf("# [... omitted lines 1 to %d before active chunk ...]", chunk_start - 1L)
+              )
+            } else {
+              header_lines <- sprintf("# [... omitted lines 1 to %d before active chunk ...]", chunk_start - 1L)
+            }
+          }
+
+          footer_lines <- character(0)
+          if (chunk_end < n_total) {
+            footer_lines <- sprintf("# [... omitted lines %d to %d after active chunk ...]", chunk_end + 1L, n_total)
+          }
+
+          return(c(header_lines, chunk_lines, footer_lines))
+        }
+      }
+    }
+  }
+
+  # Fallback: 250-line backup window centered on cursor (±125 lines)
+  window_document_contents(
+    contents = contents,
+    start_row = cursor_line,
+    end_row = cursor_line,
+    window_lines = backup_window
+  )
+}
 
 #' Extract full/windowed code context from an RStudio/Positron document with hash caching
 #'
 #' @description
-#' Extracts the active document context (sending the entire document by default for
-#' files up to 10,000 lines via `window_lines = 5000L`, and preserving YAML frontmatter
-#' and `library()`/`require()` calls if a massive file is windowed).
-#' When `cache_context = TRUE` (used in multi-turn sidebar conversations), if the
-#' document contents and path have not changed since an earlier turn in the same
-#' conversation, `fetch_code_context()` marks `doc_cached = TRUE` so the full
-#' document is not redundantly re-transmitted on every message.
+#' By default, extracts the active Quarto/RMarkdown code chunk (or a focused 250-line
+#' backup window around the cursor in `.R` files), preserving top YAML frontmatter
+#' and package imports.
+#' When whole-document intent is detected in the prompt (e.g. "entire script", "all figures",
+#' "in this document") or when `force_whole_doc = TRUE`, it automatically expands to
+#' the entire document.
 #'
 #' @param context An RStudio document context from `rstudioapi::getActiveDocumentContext()`.
-#' @param window_lines Number of lines above and below the cursor/selection to include
-#'   (default `5000L`, which includes the entire file for scripts up to 10,000 lines).
+#' @param prompt Optional user prompt string to inspect for whole-document keywords.
+#' @param force_whole_doc Logical; whether to explicitly force sending the whole document.
+#' @param window_lines Number of lines above and below the cursor/selection when whole
+#'   document is requested (default `5000L`).
+#' @param backup_window Line radius for backup window when outside a chunk (default `125L`,
+#'   giving a 250-line window).
 #' @param cache_context Logical; whether to deduplicate unchanged document contents
 #'   across multi-turn chat calls using `rlang::hash()`.
 #' @returns A list containing `file_contents`, `raw_contents`, `doc_cached`,
 #'   `total_lines`, `selection`, `selection_raw`, `file_path`, `ext`, and `cursor_line`.
 #' @keywords internal
-fetch_code_context <- function(context, window_lines = get_converser_window(), cache_context = FALSE) {
+fetch_code_context <- function(
+  context,
+  prompt = "",
+  force_whole_doc = FALSE,
+  window_lines = get_converser_window(),
+  backup_window = 125L,
+  cache_context = FALSE
+) {
   if (is.null(context)) {
     return(list(
       file_contents = character(0),
@@ -45,12 +142,23 @@ fetch_code_context <- function(context, window_lines = get_converser_window(), c
   ext <- file_extension(file_path)
   has_nonempty_doc <- length(contents) > 0 && !(length(contents) == 1L && identical(contents, ""))
 
-  windowed_contents <- window_document_contents(
-    contents = contents,
-    start_row = start_row,
-    end_row = end_row,
-    window_lines = window_lines
-  )
+  is_whole_doc <- isTRUE(force_whole_doc) || detect_whole_document_intent(prompt)
+
+  windowed_contents <- if (is_whole_doc) {
+    window_document_contents(
+      contents = contents,
+      start_row = start_row,
+      end_row = end_row,
+      window_lines = window_lines
+    )
+  } else {
+    extract_active_chunk_or_window(
+      contents = contents,
+      cursor_line = start_row,
+      ext = ext,
+      backup_window = backup_window
+    )
+  }
 
   doc_cached <- FALSE
   doc_status <- if (has_nonempty_doc) "full" else "empty"
@@ -357,14 +465,14 @@ fetch_env_context <- function(
     }
   }
 
-  ordered_candidates <- unique(c(
-    mentioned,
-    doc_vars,
-    high_priority_rem,
-    med_priority_rem,
-    low_priority_rem
-  ))
+  # 2. Prioritize objects for full S3 `describe_object()` summaries under Option E1:
+  # - All objects explicitly mentioned in selection or prompt
+  # - Plus at most 2-3 unmentioned active datasets/models/plots (or top 1 if objects were already mentioned)
+  unmentioned_pool <- unique(c(high_priority_rem, doc_vars, med_priority_rem))
+  max_unmentioned <- if (length(mentioned) > 0) 1L else 3L
+  top_unmentioned <- if (length(unmentioned_pool) > 0) utils::head(unmentioned_pool, max_unmentioned) else character(0)
 
+  ordered_candidates <- unique(c(mentioned, top_unmentioned))
   if (length(ordered_candidates) > max_objects) {
     ordered_candidates <- ordered_candidates[seq_len(as.integer(max_objects))]
   }

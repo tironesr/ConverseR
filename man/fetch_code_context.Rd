@@ -6,15 +6,25 @@
 \usage{
 fetch_code_context(
   context,
+  prompt = "",
+  force_whole_doc = FALSE,
   window_lines = get_converser_window(),
+  backup_window = 125L,
   cache_context = FALSE
 )
 }
 \arguments{
 \item{context}{An RStudio document context from \code{rstudioapi::getActiveDocumentContext()}.}
 
-\item{window_lines}{Number of lines above and below the cursor/selection to include
-(default \code{5000L}, which includes the entire file for scripts up to 10,000 lines).}
+\item{prompt}{Optional user prompt string to inspect for whole-document keywords.}
+
+\item{force_whole_doc}{Logical; whether to explicitly force sending the whole document.}
+
+\item{window_lines}{Number of lines above and below the cursor/selection when whole
+document is requested (default \code{5000L}).}
+
+\item{backup_window}{Line radius for backup window when outside a chunk (default \code{125L},
+giving a 250-line window).}
 
 \item{cache_context}{Logical; whether to deduplicate unchanged document contents
 across multi-turn chat calls using \code{rlang::hash()}.}
@@ -24,12 +34,11 @@ A list containing \code{file_contents}, \code{raw_contents}, \code{doc_cached},
 \code{total_lines}, \code{selection}, \code{selection_raw}, \code{file_path}, \code{ext}, and \code{cursor_line}.
 }
 \description{
-Extracts the active document context (sending the entire document by default for
-files up to 10,000 lines via \code{window_lines = 5000L}, and preserving YAML frontmatter
-and \code{library()}/\code{require()} calls if a massive file is windowed).
-When \code{cache_context = TRUE} (used in multi-turn sidebar conversations), if the
-document contents and path have not changed since an earlier turn in the same
-conversation, \code{fetch_code_context()} marks \code{doc_cached = TRUE} so the full
-document is not redundantly re-transmitted on every message.
+By default, extracts the active Quarto/RMarkdown code chunk (or a focused 250-line
+backup window around the cursor in \code{.R} files), preserving top YAML frontmatter
+and package imports.
+When whole-document intent is detected in the prompt (e.g. "entire script", "all figures",
+"in this document") or when \code{force_whole_doc = TRUE}, it automatically expands to
+the entire document.
 }
 \keyword{internal}
