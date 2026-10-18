@@ -532,6 +532,17 @@ describe_object.data.frame <- function(x, name = "data.frame") {
   )
 }
 
+is_model_like <- function(x) {
+  if (inherits(x, c("lm", "glm", "fixest", "merMod", "lmerMod", "glmerMod", "coxph", "lavaan", "nls", "gam", "polr", "multinom", "rq", "svyglm"))) {
+    return(TRUE)
+  }
+  if (!is.data.frame(x) && !is.function(x) && (!is.list(x) || !identical(class(x), "list"))) {
+    has_fml <- !is.null(tryCatch(stats::formula(x), error = function(e) NULL))
+    if (has_fml) return(TRUE)
+  }
+  FALSE
+}
+
 #' Shared helper to format statistical models (`lm`, `glm`, `fixest`, `merMod`, `coxph`, `lavaan`, etc.)
 #' @keywords internal
 describe_model_object <- function(x, name = "model") {
