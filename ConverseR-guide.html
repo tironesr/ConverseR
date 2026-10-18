@@ -340,7 +340,7 @@
 
     <div class="nav-group-title">Workflows</div>
     <a class="nav-link" href="#sidebar">5. Using the Sidebar</a>
-    <a class="nav-link" href="#context-efficiency" style="padding-left: 20px; font-size: 12.5px;">&rdquor; Context &amp; Full Script</a>
+    <a class="nav-link" href="#context-efficiency" style="padding-left: 20px; font-size: 12.5px;">&rdquor; Code Context &amp; Full Script</a>
     <a class="nav-link" href="#inline">6. Inline Code Edits</a>
     <a class="nav-link" href="#plots-errors">7. Sharing Plots &amp; Fixing Errors</a>
 
@@ -528,29 +528,29 @@ converser_use_openrouter(
       <p>To revert the most recent script edit made by ConverseR, click <strong>Undo</strong> in the Sidebar header or run <code>converser_undo()</code>.</p>
 
       <div id="context-efficiency">
-        <h3>Smart Context, Token Efficiency &amp; The "Full Script" Button</h3>
+        <h3>How ConverseR Reads Your Code &amp; Workspace</h3>
         <p>
-          ConverseR uses an intelligent windowing architecture that balances comprehensive codebase understanding with ultra-low token consumption:
+          To keep answers fast, accurate, and budget-friendly, ConverseR is smart about how much code and data it sends to the AI model at one time:
         </p>
         <ul>
           <li>
-            <strong>Chunk-Level Context by Default:</strong> In Quarto (<code>.qmd</code>) and RMarkdown (<code>.Rmd</code>) documents, ConverseR isolates the active code chunk enclosing your cursor (<code>```{r ...} ... ```</code>) along with document YAML frontmatter and library imports. In plain <code>.R</code> scripts, it uses a 250-line focused window centered on your cursor (&plusmn;125 lines).
+            <strong>Focused by Default (Fast &amp; Inexpensive):</strong> When you ask a question or edit code, ConverseR looks only at the specific code chunk you are working in (in Quarto or R Markdown documents), along with any packages loaded at the top of your document. In regular <code>.R</code> scripts, it looks at the code right around your cursor (roughly 125 lines above and below). This keeps responses instant and prevents sending thousands of unrelated lines you aren't currently editing.
           </li>
           <li>
-            <strong>The "Full Script" Toggle Button:</strong> When you need the assistant to analyze your entire file from top to bottom, click the <strong>Full Script</strong> toggle button (located in the action strip next to <em>Share Plot</em>). When enabled, it lights up in bright blue and displays <em>"Full Script Attached"</em>.
+            <strong>The "Full Script" Button (When You Need the Big Picture):</strong> If you want the assistant to review your entire file from top to bottom, click the <strong>Full Script</strong> button in the toolbar above the message box. It will turn bright blue and show <em>"Full Script Attached"</em> for your next message.
           </li>
           <li>
-            <strong>Automatic Keyword Escalation:</strong> Even if <em>Full Script</em> is turned off, ConverseR automatically detects document-wide intent in your prompt! If your message contains keywords or phrases requesting broader inspection:
+            <strong>Automatic Recognition for File-Wide Questions:</strong> Even if you don't click <em>Full Script</em>, ConverseR automatically senses when you are asking about your whole analysis. If you include phrases like:
             <div class="callout" style="margin: 8px 0; padding: 10px 14px; font-size: 13px;">
               <code>"in this document"</code> &bull; <code>"entire script"</code> &bull; <code>"whole file"</code> &bull; <code>"all figures"</code> &bull; <code>"all chunks"</code> &bull; <code>"all models"</code> &bull; <code>"across the document"</code> &bull; <code>"across the manuscript"</code> &bull; <code>"audit"</code> &bull; <code>"check all"</code> &bull; <code>"consistent"</code>
             </div>
-            ConverseR will automatically escalate and attach your complete document for that turn.
+            ConverseR will automatically include your complete document so it can review everything across your project.
           </li>
           <li>
-            <strong>Incremental Caching:</strong> When continuing a conversation about an open document, ConverseR sends only the line-level edits (diffs) rather than re-transmitting thousands of lines of identical code on every turn.
+            <strong>Smart Follow-Ups:</strong> When having a back-and-forth conversation about an open document, ConverseR only sends the lines you've changed since your last question, saving time and API credits.
           </li>
           <li>
-            <strong>Environment Capping (<code>.GlobalEnv</code>):</strong> ConverseR maintains a lightweight manifest of all variables in your R workspace, but restricts deep multi-line column breakdowns and model coefficient tables strictly to objects explicitly mentioned in your prompt plus the top 2–3 active datasets or models.
+            <strong>Workspace Awareness:</strong> ConverseR keeps track of all datasets, models, and variables in your R workspace. To keep things clean, it only generates full previews (like column names, sample rows, and regression results) for objects you specifically mention in your question, or the ones you are actively analyzing.
           </li>
         </ul>
       </div>
@@ -569,7 +569,7 @@ converser_use_openrouter(
         <li>Type your instruction and press <span class="kbd">Enter</span> (or click <strong>Generate</strong>).</li>
       </ol>
       <div class="callout" style="margin-top: 14px;">
-        <strong>Laser-Focused Execution:</strong> <code>converser_inline()</code> is engineered specifically for fast, targeted edits. It operates strictly within your active Quarto/RMarkdown chunk (or the &plusmn;125-line backup window), ensuring immediate response times and negligible token usage.
+        <strong>Quick &amp; Focused:</strong> <code>converser_inline()</code> only reads your active code chunk (or the lines immediately around your cursor). This guarantees instant code edits while using minimal API credits.
       </div>
     </section>
 
