@@ -265,5 +265,12 @@ test_that("expanded whole-document context (10,000 lines) and .GlobalEnv manifes
   expect_true(grepl("survey_df: <data.frame [3 rows x 3 cols]>", env_turn3_str, fixed = TRUE))
   expect_true(grepl("Unchanged .GlobalEnv objects already described in full earlier in this conversation (2)", env_turn3_str, fixed = TRUE))
   expect_false(grepl("ols_fit: <lm> formula: mpg ~ wt", env_turn3_str, fixed = TRUE))
-})
 
+  # 3. Incremental document delta: editing 1 line in a 3,500-line script sends only the changed hunk (~7 lines)
+  edited_doc <- large_doc
+  edited_doc[142] <- "xlab(\"Year (2010-2024)\")"
+  delta_out <- ConverseR:::compute_document_delta(large_doc, edited_doc, context_lines = 2L)
+  expect_lt(length(delta_out), 10L)
+  expect_true(any(grepl("- [old L142] # figure code line 142", delta_out, fixed = TRUE)))
+  expect_true(any(grepl("+ [new L142] xlab(\"Year (2010-2024)\")", delta_out, fixed = TRUE)))
+})

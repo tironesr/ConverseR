@@ -751,6 +751,8 @@ converser_reset <- function() {
 
 converser_clear_context_cache <- function() {
   converser_env[["cached_doc_hash"]] <- NULL
+  converser_env[["cached_doc_path"]] <- NULL
+  converser_env[["cached_doc_lines"]] <- NULL
   converser_env[["cached_manifest_hash"]] <- NULL
   converser_env[["cached_env_hashes"]] <- list()
   invisible(NULL)

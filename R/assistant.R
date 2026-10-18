@@ -192,18 +192,28 @@ construct_turn_impl <- function(
 
   file_contents <- code_context[["file_contents"]]
   doc_cached <- isTRUE(code_context[["doc_cached"]])
+  doc_status <- code_context[["doc_status"]] %||% "full"
   total_lines <- code_context[["total_lines"]] %||% 0L
   selection <- code_context[["selection"]]
   selection_raw <- code_context[["selection_raw"]] %||% ""
   ext <- code_context[["ext"]] %||% "r"
   cursor_line <- code_context[["cursor_line"]] %||% 1L
 
-  if (doc_cached) {
+  if (doc_cached || identical(doc_status, "unchanged")) {
     res <- c(
       sprintf(
         "The user is working in the same `.%s` file (%d lines, unchanged from earlier in this conversation; cursor is currently at line %d).",
         ext, total_lines, cursor_line
       )
+    )
+  } else if (identical(doc_status, "delta") && length(file_contents) > 0) {
+    res <- c(
+      sprintf(
+        "The user made the following incremental edits to the active `.%s` file (%d total lines; cursor at line %d) since the last turn (only changed lines and surrounding context shown):",
+        ext, total_lines, cursor_line
+      ),
+      "",
+      file_contents
     )
   } else if (length(file_contents) > 0) {
     res <- c(

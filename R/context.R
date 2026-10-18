@@ -25,6 +25,7 @@ fetch_code_context <- function(context, window_lines = get_converser_window(), c
       file_contents = character(0),
       raw_contents = character(0),
       doc_cached = FALSE,
+      doc_status = "empty",
       total_lines = 0L,
       selection = character(0),
       selection_raw = "",
@@ -52,19 +53,41 @@ fetch_code_context <- function(context, window_lines = get_converser_window(), c
   )
 
   doc_cached <- FALSE
+  doc_status <- if (has_nonempty_doc) "full" else "empty"
+  out_contents <- windowed_contents
+
   if (isTRUE(cache_context) && has_nonempty_doc) {
     doc_hash <- rlang::hash(list(path = file_path, contents = windowed_contents))
-    if (identical(doc_hash, converser_env[["cached_doc_hash"]])) {
+    prev_hash <- converser_env[["cached_doc_hash"]]
+    prev_path <- converser_env[["cached_doc_path"]]
+    prev_lines <- converser_env[["cached_doc_lines"]]
+
+    if (identical(doc_hash, prev_hash)) {
       doc_cached <- TRUE
+      doc_status <- "unchanged"
+      out_contents <- character(0)
+    } else if (!is.null(prev_lines) && identical(file_path, prev_path)) {
+      delta_lines <- compute_document_delta(prev_lines, windowed_contents, context_lines = 2L)
+      # Use the incremental diff if it is more compact than re-sending the whole document
+      if (length(delta_lines) > 0 && length(delta_lines) <= max(25L, ceiling(length(windowed_contents) * 0.6))) {
+        doc_status <- "delta"
+        out_contents <- delta_lines
+      }
+      converser_env[["cached_doc_hash"]] <- doc_hash
+      converser_env[["cached_doc_path"]] <- file_path
+      converser_env[["cached_doc_lines"]] <- windowed_contents
     } else {
       converser_env[["cached_doc_hash"]] <- doc_hash
+      converser_env[["cached_doc_path"]] <- file_path
+      converser_env[["cached_doc_lines"]] <- windowed_contents
     }
   }
 
   list(
-    file_contents = if (doc_cached) character(0) else fence_block(windowed_contents),
+    file_contents = if (doc_cached) character(0) else fence_block(out_contents),
     raw_contents = contents,
     doc_cached = doc_cached,
+    doc_status = doc_status,
     total_lines = length(contents),
     selection = fence_block(selection_text),
     selection_raw = selection_text,
@@ -72,6 +95,120 @@ fetch_code_context <- function(context, window_lines = get_converser_window(), c
     ext = ext,
     cursor_line = start_row
   )
+}
+
+#' Compute a compact line-numbered incremental diff between previous and current document states
+#' @keywords internal
+compute_document_delta <- function(old_lines, new_lines, context_lines = 2L) {
+  if (identical(old_lines, new_lines)) {
+    return(character(0))
+  }
+
+  n_old <- length(old_lines)
+  n_new <- length(new_lines)
+
+  # Fast path when line count is unchanged: find exact modified line indices
+  if (n_old == n_new) {
+    diff_idx <- which(old_lines != new_lines)
+    if (length(diff_idx) == 0) return(character(0))
+    hunks <- group_indices_into_hunks(diff_idx, merge_gap = context_lines * 2L + 1L)
+    out <- character(0)
+    for (h in hunks) {
+      s <- h[1]
+      e <- h[2]
+      ctx_before <- if (s > 1L) seq.int(max(1L, s - context_lines), s - 1L) else integer(0)
+      ctx_after <- if (e < n_new) seq.int(e + 1L, min(n_new, e + context_lines)) else integer(0)
+
+      out <- c(out, sprintf("@@ Lines %d-%d @@", max(1L, s - context_lines), min(n_new, e + context_lines)))
+      if (length(ctx_before) > 0) {
+        out <- c(out, sprintf("  [L%d] %s", ctx_before, new_lines[ctx_before]))
+      }
+      for (i in seq.int(s, e)) {
+        if (identical(old_lines[i], new_lines[i])) {
+          out <- c(out, sprintf("  [L%d] %s", i, new_lines[i]))
+        } else {
+          out <- c(
+            out,
+            sprintf("- [old L%d] %s", i, old_lines[i]),
+            sprintf("+ [new L%d] %s", i, new_lines[i])
+          )
+        }
+      }
+      if (length(ctx_after) > 0) {
+        out <- c(out, sprintf("  [L%d] %s", ctx_after, new_lines[ctx_after]))
+      }
+    }
+    return(out)
+  }
+
+  # General path when lines were inserted or deleted:
+  # 1. Trim common prefix and common suffix
+  min_len <- min(n_old, n_new)
+  prefix_len <- 0L
+  while (prefix_len < min_len && identical(old_lines[prefix_len + 1L], new_lines[prefix_len + 1L])) {
+    prefix_len <- prefix_len + 1L
+  }
+
+  suffix_len <- 0L
+  while (
+    suffix_len < (min_len - prefix_len) &&
+    identical(old_lines[n_old - suffix_len], new_lines[n_new - suffix_len])
+  ) {
+    suffix_len <- suffix_len + 1L
+  }
+
+  old_start <- prefix_len + 1L
+  old_end <- n_old - suffix_len
+  new_start <- prefix_len + 1L
+  new_end <- n_new - suffix_len
+
+  ctx_before <- if (new_start > 1L) seq.int(max(1L, new_start - context_lines), new_start - 1L) else integer(0)
+  ctx_after <- if (new_end < n_new) seq.int(new_end + 1L, min(n_new, new_end + context_lines)) else integer(0)
+
+  hdr <- sprintf(
+    "@@ Old lines %d-%d -> New lines %d-%d (total lines now %d) @@",
+    max(1L, old_start), max(old_start, old_end),
+    max(1L, new_start), max(new_start, new_end),
+    n_new
+  )
+
+  out <- hdr
+  if (length(ctx_before) > 0) {
+    out <- c(out, sprintf("  [L%d] %s", ctx_before, new_lines[ctx_before]))
+  }
+  if (old_start <= old_end) {
+    old_rng <- seq.int(old_start, old_end)
+    out <- c(out, sprintf("- [old L%d] %s", old_rng, old_lines[old_rng]))
+  }
+  if (new_start <= new_end) {
+    new_rng <- seq.int(new_start, new_end)
+    out <- c(out, sprintf("+ [new L%d] %s", new_rng, new_lines[new_rng]))
+  }
+  if (length(ctx_after) > 0) {
+    out <- c(out, sprintf("  [L%d] %s", ctx_after, new_lines[ctx_after]))
+  }
+
+  out
+}
+
+group_indices_into_hunks <- function(idx, merge_gap = 5L) {
+  if (length(idx) == 0) return(list())
+  hunks <- list()
+  cur_s <- idx[1]
+  cur_e <- idx[1]
+  if (length(idx) > 1L) {
+    for (k in idx[-1]) {
+      if ((k - cur_e) <= merge_gap) {
+        cur_e <- k
+      } else {
+        hunks[[length(hunks) + 1L]] <- c(cur_s, cur_e)
+        cur_s <- k
+        cur_e <- k
+      }
+    }
+  }
+  hunks[[length(hunks) + 1L]] <- c(cur_s, cur_e)
+  hunks
 }
 
 window_document_contents <- function(contents, start_row, end_row, window_lines = 5000L) {

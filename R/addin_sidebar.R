@@ -418,6 +418,8 @@ api_post_chat <- function(body) {
 
   # Snapshot cache hashes in case the LLM request errors out or is aborted
   prev_doc_hash <- converser_env[["cached_doc_hash"]]
+  prev_doc_path <- converser_env[["cached_doc_path"]]
+  prev_doc_lines <- converser_env[["cached_doc_lines"]]
   prev_manifest_hash <- converser_env[["cached_manifest_hash"]]
   prev_env_hashes <- converser_env[["cached_env_hashes"]]
 
@@ -503,6 +505,8 @@ api_post_chat <- function(body) {
             error = function(e2) {
               # Restore cache state if the turn failed completely
               converser_env[["cached_doc_hash"]] <- prev_doc_hash
+              converser_env[["cached_doc_path"]] <- prev_doc_path
+              converser_env[["cached_doc_lines"]] <- prev_doc_lines
               converser_env[["cached_manifest_hash"]] <- prev_manifest_hash
               converser_env[["cached_env_hashes"]] <- prev_env_hashes
               paste0("**Error communicating with LLM:** ", conditionMessage(e))
