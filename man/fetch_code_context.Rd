@@ -2,24 +2,34 @@
 % Please edit documentation in R/context.R
 \name{fetch_code_context}
 \alias{fetch_code_context}
-\title{Extract smart windowed code context from an RStudio/Positron document}
+\title{Extract full/windowed code context from an RStudio/Positron document with hash caching}
 \usage{
-fetch_code_context(context, window_lines = get_converser_window())
+fetch_code_context(
+  context,
+  window_lines = get_converser_window(),
+  cache_context = FALSE
+)
 }
 \arguments{
 \item{context}{An RStudio document context from \code{rstudioapi::getActiveDocumentContext()}.}
 
-\item{window_lines}{Number of lines above and below the cursor/selection to include.}
+\item{window_lines}{Number of lines above and below the cursor/selection to include
+(default \code{5000L}, which includes the entire file for scripts up to 10,000 lines).}
+
+\item{cache_context}{Logical; whether to deduplicate unchanged document contents
+across multi-turn chat calls using \code{rlang::hash()}.}
 }
 \value{
-A list containing \code{file_contents}, \code{selection}, \code{selection_raw},
-\code{file_path}, \code{ext}, and \code{cursor_line}.
+A list containing \code{file_contents}, \code{raw_contents}, \code{doc_cached},
+\code{total_lines}, \code{selection}, \code{selection_raw}, \code{file_path}, \code{ext}, and \code{cursor_line}.
 }
 \description{
-Instead of sending an entire 5,000-line Quarto/RMarkdown manuscript or script
-on every keystroke like \code{gander}, \code{fetch_code_context()} extracts a configurable
-window around the active cursor/selection, while also preserving YAML frontmatter
-and \code{library()}/\code{require()} calls from the top of the file so the LLM always knows
-loaded packages and document metadata.
+Extracts the active document context (sending the entire document by default for
+files up to 10,000 lines via \code{window_lines = 5000L}, and preserving YAML frontmatter
+and \code{library()}/\code{require()} calls if a massive file is windowed).
+When \code{cache_context = TRUE} (used in multi-turn sidebar conversations), if the
+document contents and path have not changed since an earlier turn in the same
+conversation, \code{fetch_code_context()} marks \code{doc_cached = TRUE} so the full
+document is not redundantly re-transmitted on every message.
 }
 \keyword{internal}

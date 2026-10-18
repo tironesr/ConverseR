@@ -204,3 +204,66 @@ test_that("non-blocking httpuv sidebar server serves 200 OK HTML, Top 20 OpenRou
   parsed <- jsonlite::fromJSON(res_state$body)
   expect_true(isTRUE(parsed$ok))
 })
+
+test_that("expanded whole-document context (10,000 lines) and .GlobalEnv manifest/objects use session hash caching across turns", {
+  ConverseR:::converser_clear_context_cache()
+  on.exit(ConverseR:::converser_clear_context_cache(), add = TRUE)
+
+  # 1. Default window_lines = 5000L sends a 3,500-line document in full without truncation
+  large_doc <- paste0("# figure code line ", seq_len(3500))
+  full_out <- ConverseR:::window_document_contents(
+    contents = large_doc,
+    start_row = 100L,
+    end_row = 100L
+  )
+  expect_length(full_out, 3500L)
+
+  # 2. Expanded .GlobalEnv mode (include_all = TRUE) + hash caching (cache_context = TRUE)
+  test_env <- rlang::new_environment(list(
+    survey_df = data.frame(age = c(25, 30, NA), trust = c(1, 5, 7)),
+    ols_fit = lm(mpg ~ wt, data = mtcars),
+    study_n = 1200L
+  ))
+
+  # Turn 1: Even when the user asks a general question without naming any objects,
+  # all objects in .GlobalEnv are included in the manifest and described in full!
+  env_turn1 <- ConverseR:::fetch_env_context(
+    selection = "",
+    input = "Are there any missing values in my datasets, and what is the R-squared of my models?",
+    env = test_env,
+    include_all = TRUE,
+    cache_context = TRUE
+  )
+  env_turn1_str <- paste(env_turn1, collapse = "\n")
+  expect_true(grepl("Global Environment (.GlobalEnv) Manifest (3 total objects):", env_turn1_str, fixed = TRUE))
+  expect_true(grepl("survey_df: <data.frame [3 rows x 2 cols]>", env_turn1_str, fixed = TRUE))
+  expect_true(grepl("ols_fit: <lm> formula: mpg ~ wt", env_turn1_str, fixed = TRUE))
+
+  # Turn 2: When nothing in .GlobalEnv has changed, the manifest and object summaries are cached!
+  env_turn2 <- ConverseR:::fetch_env_context(
+    selection = "",
+    input = "Now write code to plot the residuals.",
+    env = test_env,
+    include_all = TRUE,
+    cache_context = TRUE
+  )
+  env_turn2_str <- paste(env_turn2, collapse = "\n")
+  expect_true(grepl("manifest (3 objects) is unchanged from earlier in this conversation", env_turn2_str, fixed = TRUE))
+  expect_true(grepl("Unchanged .GlobalEnv objects already described in full earlier in this conversation (3)", env_turn2_str, fixed = TRUE))
+  expect_false(grepl("survey_df: <data.frame [3 rows x 2 cols]>", env_turn2_str, fixed = TRUE))
+
+  # Turn 3: If one object (`survey_df`) is modified in .GlobalEnv, ONLY `survey_df` is re-described!
+  test_env$survey_df$new_col <- c(10, 20, 30)
+  env_turn3 <- ConverseR:::fetch_env_context(
+    selection = "",
+    input = "Check the updated dataset.",
+    env = test_env,
+    include_all = TRUE,
+    cache_context = TRUE
+  )
+  env_turn3_str <- paste(env_turn3, collapse = "\n")
+  expect_true(grepl("survey_df: <data.frame [3 rows x 3 cols]>", env_turn3_str, fixed = TRUE))
+  expect_true(grepl("Unchanged .GlobalEnv objects already described in full earlier in this conversation (2)", env_turn3_str, fixed = TRUE))
+  expect_false(grepl("ols_fit: <lm> formula: mpg ~ wt", env_turn3_str, fixed = TRUE))
+})
+

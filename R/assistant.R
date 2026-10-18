@@ -133,22 +133,37 @@ construct_system_prompt <- function(
 #'
 #' @param user_prompt User's natural language request.
 #' @param context RStudio document context.
-#' @param include_env Logical; whether to automatically attach matched `.GlobalEnv` summaries.
+#' @param include_env Logical; whether to automatically attach `.GlobalEnv` manifest and summaries.
 #' @param include_error Logical; whether to attach the most recent R error & backtrace.
-#' @param window_lines Number of surrounding code lines to include.
+#' @param window_lines Number of surrounding code lines to include (default `5000L`).
+#' @param cache_context Logical; whether to deduplicate unchanged document and `.GlobalEnv`
+#'   objects across multi-turn conversation calls using `rlang::hash()`.
 #' @keywords internal
 construct_turn <- function(
   user_prompt,
   context = NULL,
   include_env = TRUE,
   include_error = FALSE,
-  window_lines = get_converser_window()
+  window_lines = get_converser_window(),
+  cache_context = FALSE
 ) {
-  code_ctx <- fetch_code_context(context, window_lines = window_lines)
+  code_ctx <- fetch_code_context(
+    context,
+    window_lines = window_lines,
+    cache_context = cache_context
+  )
   selection_raw <- code_ctx[["selection_raw"]] %||% ""
+  raw_contents <- code_ctx[["raw_contents"]] %||% character(0)
 
   env_ctx <- if (isTRUE(include_env)) {
-    fetch_env_context(selection_raw, user_prompt, env = global_env())
+    fetch_env_context(
+      selection = selection_raw,
+      input = user_prompt,
+      env = global_env(),
+      document_contents = raw_contents,
+      include_all = TRUE,
+      cache_context = cache_context
+    )
   } else {
     character(0)
   }
@@ -176,13 +191,26 @@ construct_turn_impl <- function(
   res <- character(0)
 
   file_contents <- code_context[["file_contents"]]
+  doc_cached <- isTRUE(code_context[["doc_cached"]])
+  total_lines <- code_context[["total_lines"]] %||% 0L
   selection <- code_context[["selection"]]
   selection_raw <- code_context[["selection_raw"]] %||% ""
   ext <- code_context[["ext"]] %||% "r"
+  cursor_line <- code_context[["cursor_line"]] %||% 1L
 
-  if (length(file_contents) > 0) {
+  if (doc_cached) {
     res <- c(
-      sprintf("The user is currently working in this `.%s` file (windowed around line %d):", ext, code_context[["cursor_line"]] %||% 1L),
+      sprintf(
+        "The user is working in the same `.%s` file (%d lines, unchanged from earlier in this conversation; cursor is currently at line %d).",
+        ext, total_lines, cursor_line
+      )
+    )
+  } else if (length(file_contents) > 0) {
+    res <- c(
+      sprintf(
+        "The user is currently working in this `.%s` file (%d total lines; cursor at line %d):",
+        ext, total_lines, cursor_line
+      ),
       "",
       file_contents
     )
@@ -203,7 +231,7 @@ construct_turn_impl <- function(
   if (length(env_context) > 0 && !identical(env_context, character(0))) {
     res <- c(
       res, "",
-      "Relevant objects detected in the user's R Global Environment (.GlobalEnv):",
+      "Objects in the user's R Global Environment (.GlobalEnv):",
       "",
       env_context
     )

@@ -1,23 +1,31 @@
-# Code & Environment Context Extraction ----------------------------------------
+# Code & Environment Context Extraction (Expanded + Hash-Cached) --------------
 
-#' Extract smart windowed code context from an RStudio/Positron document
+#' Extract full/windowed code context from an RStudio/Positron document with hash caching
 #'
 #' @description
-#' Instead of sending an entire 5,000-line Quarto/RMarkdown manuscript or script
-#' on every keystroke like `gander`, `fetch_code_context()` extracts a configurable
-#' window around the active cursor/selection, while also preserving YAML frontmatter
-#' and `library()`/`require()` calls from the top of the file so the LLM always knows
-#' loaded packages and document metadata.
+#' Extracts the active document context (sending the entire document by default for
+#' files up to 10,000 lines via `window_lines = 5000L`, and preserving YAML frontmatter
+#' and `library()`/`require()` calls if a massive file is windowed).
+#' When `cache_context = TRUE` (used in multi-turn sidebar conversations), if the
+#' document contents and path have not changed since an earlier turn in the same
+#' conversation, `fetch_code_context()` marks `doc_cached = TRUE` so the full
+#' document is not redundantly re-transmitted on every message.
 #'
 #' @param context An RStudio document context from `rstudioapi::getActiveDocumentContext()`.
-#' @param window_lines Number of lines above and below the cursor/selection to include.
-#' @returns A list containing `file_contents`, `selection`, `selection_raw`,
-#'   `file_path`, `ext`, and `cursor_line`.
+#' @param window_lines Number of lines above and below the cursor/selection to include
+#'   (default `5000L`, which includes the entire file for scripts up to 10,000 lines).
+#' @param cache_context Logical; whether to deduplicate unchanged document contents
+#'   across multi-turn chat calls using `rlang::hash()`.
+#' @returns A list containing `file_contents`, `raw_contents`, `doc_cached`,
+#'   `total_lines`, `selection`, `selection_raw`, `file_path`, `ext`, and `cursor_line`.
 #' @keywords internal
-fetch_code_context <- function(context, window_lines = get_converser_window()) {
+fetch_code_context <- function(context, window_lines = get_converser_window(), cache_context = FALSE) {
   if (is.null(context)) {
     return(list(
       file_contents = character(0),
+      raw_contents = character(0),
+      doc_cached = FALSE,
+      total_lines = 0L,
       selection = character(0),
       selection_raw = "",
       file_path = "",
@@ -26,12 +34,15 @@ fetch_code_context <- function(context, window_lines = get_converser_window()) {
     ))
   }
 
-  contents <- context$contents
+  contents <- context$contents %||% character(0)
   primary_sel <- rstudioapi::primary_selection(context)
   selection_text <- primary_sel[["text"]] %||% ""
 
   start_row <- primary_sel$range$start[["row"]] %||% 1L
   end_row <- primary_sel$range$end[["row"]] %||% start_row
+  file_path <- context$path %||% ""
+  ext <- file_extension(file_path)
+  has_nonempty_doc <- length(contents) > 0 && !(length(contents) == 1L && identical(contents, ""))
 
   windowed_contents <- window_document_contents(
     contents = contents,
@@ -40,17 +51,30 @@ fetch_code_context <- function(context, window_lines = get_converser_window()) {
     window_lines = window_lines
   )
 
+  doc_cached <- FALSE
+  if (isTRUE(cache_context) && has_nonempty_doc) {
+    doc_hash <- rlang::hash(list(path = file_path, contents = windowed_contents))
+    if (identical(doc_hash, converser_env[["cached_doc_hash"]])) {
+      doc_cached <- TRUE
+    } else {
+      converser_env[["cached_doc_hash"]] <- doc_hash
+    }
+  }
+
   list(
-    file_contents = fence_block(windowed_contents),
+    file_contents = if (doc_cached) character(0) else fence_block(windowed_contents),
+    raw_contents = contents,
+    doc_cached = doc_cached,
+    total_lines = length(contents),
     selection = fence_block(selection_text),
     selection_raw = selection_text,
-    file_path = context$path %||% "",
-    ext = file_extension(context$path %||% ""),
+    file_path = file_path,
+    ext = ext,
     cursor_line = start_row
   )
 }
 
-window_document_contents <- function(contents, start_row, end_row, window_lines = 75L) {
+window_document_contents <- function(contents, start_row, end_row, window_lines = 5000L) {
   n_total <- length(contents)
   if (n_total == 0 || (n_total == 1 && identical(contents, ""))) {
     return(character(0))
@@ -104,16 +128,34 @@ fence_block <- function(x) {
   c("`````", x, "`````")
 }
 
-# Environment Inspection (AST + Word-Boundary + S3 Smart Summaries) ------------
+# Environment Inspection (Manifest + Expanded S3 Summaries + Hash Caching) -----
 
-#' Extract relevant R environment context without false-positive substring matching
+#' Extract R environment context with expanded `.GlobalEnv` coverage and hash caching
 #'
 #' @param selection Selected code string.
 #' @param input User prompt string.
 #' @param env Environment to inspect (defaults to `.GlobalEnv`).
+#' @param document_contents Optional character vector of active document lines.
+#' @param include_all Logical; if `TRUE` (used by `construct_turn()`), includes a
+#'   manifest of all `.GlobalEnv` objects (up to 200) plus full `describe_object()`
+#'   summaries for up to `max_objects` (default 50) objects in `.GlobalEnv` even if
+#'   not explicitly named in the prompt. If `FALSE`, only describes objects explicitly
+#'   mentioned in `selection` or `input`.
+#' @param cache_context Logical; if `TRUE`, tracks `rlang::hash()` per object in
+#'   `converser_env[["cached_env_hashes"]]` so unchanged `.GlobalEnv` objects are
+#'   not re-transmitted on subsequent turns of the same conversation.
+#' @param max_objects Maximum number of objects to describe in full (default `50L`).
 #' @returns Character vector of formatted environment descriptions.
 #' @keywords internal
-fetch_env_context <- function(selection, input, env = global_env()) {
+fetch_env_context <- function(
+  selection,
+  input,
+  env = global_env(),
+  document_contents = character(0),
+  include_all = FALSE,
+  cache_context = FALSE,
+  max_objects = get_converser_max_env_objects()
+) {
   obj_names <- ls(envir = env, all.names = FALSE)
   if (length(obj_names) == 0) {
     return(character(0))
@@ -121,19 +163,162 @@ fetch_env_context <- function(selection, input, env = global_env()) {
 
   sel_vars <- extract_identifiers(selection)
   prompt_vars <- extract_mentioned_objects(input, obj_names)
-
   mentioned <- intersect(obj_names, unique(c(sel_vars, prompt_vars)))
 
-  if (length(mentioned) == 0) {
+  if (!isTRUE(include_all)) {
+    if (length(mentioned) == 0) {
+      return(character(0))
+    }
+    res <- describe_variables(mentioned, env)
+    if (identical(res, character(0))) {
+      return(character(0))
+    }
+    return(c("`````", res, "`````"))
+  }
+
+  # Expanded Mode (Option B1):
+  # 1. Build a compact manifest of all objects in .GlobalEnv (up to 200 objects)
+  manifest_lines <- build_env_manifest(obj_names, env = env, max_manifest = 200L)
+  manifest_section <- character(0)
+  if (length(manifest_lines) > 0) {
+    m_hash <- rlang::hash(manifest_lines)
+    if (isTRUE(cache_context) && identical(m_hash, converser_env[["cached_manifest_hash"]])) {
+      manifest_section <- sprintf(
+        "# [Global Environment (.GlobalEnv) manifest (%d objects) is unchanged from earlier in this conversation]",
+        length(obj_names)
+      )
+    } else {
+      if (isTRUE(cache_context)) {
+        converser_env[["cached_manifest_hash"]] <- m_hash
+      }
+      manifest_section <- c(
+        sprintf("# Global Environment (.GlobalEnv) Manifest (%d total objects):", length(obj_names)),
+        manifest_lines,
+        ""
+      )
+    }
+  }
+
+  # 2. Prioritize objects for full S3 `describe_object()` summaries up to `max_objects` (default 50)
+  doc_vars <- intersect(obj_names, extract_identifiers(document_contents))
+
+  # Classify remaining objects so data frames, models, hypothesis tests, and plots come before functions
+  remaining <- setdiff(obj_names, c(mentioned, doc_vars))
+  high_priority_rem <- character(0)
+  med_priority_rem <- character(0)
+  low_priority_rem <- character(0)
+
+  for (nm in remaining) {
+    obj <- tryCatch(env_get(env, nm), error = function(e) NULL)
+    if (is.null(obj)) next
+    if (is.data.frame(obj) || is_model_like(obj) || inherits(obj, c("htest", "ggplot"))) {
+      high_priority_rem <- c(high_priority_rem, nm)
+    } else if (!is.function(obj)) {
+      med_priority_rem <- c(med_priority_rem, nm)
+    } else {
+      low_priority_rem <- c(low_priority_rem, nm)
+    }
+  }
+
+  ordered_candidates <- unique(c(
+    mentioned,
+    doc_vars,
+    high_priority_rem,
+    med_priority_rem,
+    low_priority_rem
+  ))
+
+  if (length(ordered_candidates) > max_objects) {
+    ordered_candidates <- ordered_candidates[seq_len(as.integer(max_objects))]
+  }
+
+  # 3. Describe candidate objects with per-object hash caching
+  cached_hashes <- converser_env[["cached_env_hashes"]] %||% list()
+  described_blocks <- character(0)
+  already_cached_names <- character(0)
+
+  for (nm in ordered_candidates) {
+    if (!env_has(env, nm)) next
+    obj <- tryCatch(env_get(env, nm), error = function(e) NULL)
+    if (is.null(obj)) next
+
+    obj_hash <- tryCatch(rlang::hash(obj), error = function(e) NA_character_)
+    if (isTRUE(cache_context) && !is.na(obj_hash) && identical(cached_hashes[[nm]], obj_hash)) {
+      already_cached_names <- c(already_cached_names, nm)
+      next
+    }
+
+    obj_desc <- tryCatch(
+      describe_object(obj, nm),
+      error = function(e) paste0("# ", nm, ": <error inspecting object: ", conditionMessage(e), ">")
+    )
+    described_blocks <- c(described_blocks, obj_desc, "")
+    if (isTRUE(cache_context) && !is.na(obj_hash)) {
+      cached_hashes[[nm]] <- obj_hash
+    }
+  }
+
+  if (isTRUE(cache_context)) {
+    converser_env[["cached_env_hashes"]] <- cached_hashes
+  }
+
+  cache_note <- character(0)
+  if (length(already_cached_names) > 0) {
+    cache_note <- sprintf(
+      "# [Unchanged .GlobalEnv objects already described in full earlier in this conversation (%d): %s]",
+      length(already_cached_names),
+      paste(already_cached_names, collapse = ", ")
+    )
+  }
+
+  combined <- c(manifest_section, described_blocks, cache_note)
+  if (length(combined) == 0) {
     return(character(0))
   }
 
-  res <- describe_variables(mentioned, env)
-  if (identical(res, character(0))) {
-    return(character(0))
-  }
+  c("`````", combined, "`````")
+}
 
-  c("`````", res, "`````")
+build_env_manifest <- function(obj_names, env = global_env(), max_manifest = 200L) {
+  if (length(obj_names) == 0) return(character(0))
+  shown_names <- if (length(obj_names) > max_manifest) obj_names[seq_len(max_manifest)] else obj_names
+
+  lines <- vapply(
+    shown_names,
+    function(nm) {
+      tryCatch(
+        {
+          x <- env_get(env, nm)
+          cls <- paste(class(x), collapse = "/")
+          if (is.data.frame(x)) {
+            cols <- names(x)
+            col_preview <- if (length(cols) > 25L) {
+              paste0(paste(cols[1:25], collapse = ", "), sprintf(", ... (+%d more)", length(cols) - 25L))
+            } else {
+              paste(cols, collapse = ", ")
+            }
+            sprintf("# - %s: <%s [%d x %d]> cols: %s", nm, cls, nrow(x), ncol(x), col_preview)
+          } else if (is_model_like(x)) {
+            fml <- tryCatch(deparse1(stats::formula(x)), error = function(e) "")
+            sprintf("# - %s: <%s> %s", nm, cls, fml)
+          } else if (!is.null(dim(x))) {
+            sprintf("# - %s: <%s [%s]>", nm, cls, paste(dim(x), collapse = " x "))
+          } else if (is.function(x)) {
+            sprintf("# - %s: <function(%s)>", nm, paste(names(formals(x)), collapse = ", "))
+          } else {
+            sprintf("# - %s: <%s (len=%d)>", nm, cls, length(x))
+          }
+        },
+        error = function(e) sprintf("# - %s: <uninspectable>", nm)
+      )
+    },
+    character(1)
+  )
+
+  if (length(obj_names) > max_manifest) {
+    lines <- c(lines, sprintf("# - ... and %d additional objects in .GlobalEnv", length(obj_names) - max_manifest))
+  }
+  unname(lines)
 }
 
 #' Extract syntactically valid R identifiers using treesitter.r with safe fallback

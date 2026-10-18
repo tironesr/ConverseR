@@ -214,7 +214,11 @@ converser_load_saved_config <- function(quiet = FALSE, init_chat = TRUE) {
 #' @param dims Integer vector of length 2 `c(rows, cols)` controlling how many
 #'   rows and columns of data frames are previewed in context. Default is `c(5L, 50L)`.
 #' @param window_lines Integer number of lines above and below the cursor/selection
-#'   to include as code context. Set to `Inf` to send the entire file. Default is `75L`.
+#'   to include as code context. Default is `5000L` (sends the entire document for
+#'   files up to 10,000 lines). Set to `Inf` for unlimited lines.
+#' @param max_env_objects Integer maximum number of `.GlobalEnv` objects to include
+#'   with full `describe_object()` summaries in the context (in addition to the
+#'   complete `.GlobalEnv` manifest). Default is `50L`.
 #' @param enable_tools Logical; whether to register live R session introspection
 #'   tools (`inspect_data`, `inspect_model`, `search_r_help`, `list_env_objects`)
 #'   on the chat. Default is `TRUE`.
@@ -232,6 +236,7 @@ converser_config <- function(
   openrouter_api_key = NULL,
   dims = NULL,
   window_lines = NULL,
+  max_env_objects = NULL,
   enable_tools = NULL,
   persist = FALSE
 ) {
@@ -253,6 +258,7 @@ converser_config <- function(
     opts[["converser.chat"]] <- chat
     converser_env[["active_chat"]] <- NULL
     converser_env[["last_inline_chat"]] <- NULL
+    converser_clear_context_cache()
   }
   if (!is.null(style)) {
     if (!is_string(style)) {
@@ -284,6 +290,12 @@ converser_config <- function(
       cli_abort("{.arg window_lines} must be a single positive number or {.code Inf}.")
     }
     opts[["converser.window_lines"]] <- window_lines
+  }
+  if (!is.null(max_env_objects)) {
+    if (length(max_env_objects) != 1L || !is.numeric(max_env_objects) || max_env_objects < 1) {
+      cli_abort("{.arg max_env_objects} must be a positive integer or {.code Inf}.")
+    }
+    opts[["converser.max_env_objects"]] <- max_env_objects
   }
   if (!is.null(enable_tools)) {
     if (!is_bool(enable_tools)) {
@@ -410,6 +422,7 @@ converser_use_openrouter <- function(
   options(converser.chat = chat, gander.chat = chat)
   converser_env[["active_chat"]] <- NULL
   converser_env[["last_inline_chat"]] <- NULL
+  converser_clear_context_cache()
 
   if (isTRUE(persist)) {
     converser_save_config(api_key = api_key)
@@ -731,7 +744,15 @@ converser_reset <- function() {
   converser_env[["last_call_chat"]] <- NULL
   converser_env[["last_edit"]] <- NULL
   converser_env[["chat_history_ui"]] <- list()
+  converser_clear_context_cache()
   cli_inform(c("v" = "ConverseR multi-turn chat history and state have been reset."))
+  invisible(NULL)
+}
+
+converser_clear_context_cache <- function() {
+  converser_env[["cached_doc_hash"]] <- NULL
+  converser_env[["cached_manifest_hash"]] <- NULL
+  converser_env[["cached_env_hashes"]] <- list()
   invisible(NULL)
 }
 
@@ -855,11 +876,19 @@ get_converser_dims <- function() {
 }
 
 get_converser_window <- function() {
-  win <- getOption("converser.window_lines", 75L)
+  win <- getOption("converser.window_lines", 5000L)
   if (!is.numeric(win) || length(win) != 1L || win < 1) {
-    return(75L)
+    return(5000L)
   }
   win
+}
+
+get_converser_max_env_objects <- function() {
+  mx <- getOption("converser.max_env_objects", 50L)
+  if (!is.numeric(mx) || length(mx) != 1L || mx < 1) {
+    return(50L)
+  }
+  mx
 }
 
 file_extension <- function(file_path) {

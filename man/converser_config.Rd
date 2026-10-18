@@ -13,6 +13,7 @@ converser_config(
   openrouter_api_key = NULL,
   dims = NULL,
   window_lines = NULL,
+  max_env_objects = NULL,
   enable_tools = NULL,
   persist = FALSE
 )
@@ -38,7 +39,12 @@ to the system prompt.}
 rows and columns of data frames are previewed in context. Default is \code{c(5L, 50L)}.}
 
 \item{window_lines}{Integer number of lines above and below the cursor/selection
-to include as code context. Set to \code{Inf} to send the entire file. Default is \code{75L}.}
+to include as code context. Default is \code{5000L} (sends the entire document for
+files up to 10,000 lines). Set to \code{Inf} for unlimited lines.}
+
+\item{max_env_objects}{Integer maximum number of \code{.GlobalEnv} objects to include
+with full \code{describe_object()} summaries in the context (in addition to the
+complete \code{.GlobalEnv} manifest). Default is \code{50L}.}
 
 \item{enable_tools}{Logical; whether to register live R session introspection
 tools (\code{inspect_data}, \code{inspect_model}, \code{search_r_help}, \code{list_env_objects})

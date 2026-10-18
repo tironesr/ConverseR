@@ -2,9 +2,17 @@
 % Please edit documentation in R/context.R
 \name{fetch_env_context}
 \alias{fetch_env_context}
-\title{Extract relevant R environment context without false-positive substring matching}
+\title{Extract R environment context with expanded \code{.GlobalEnv} coverage and hash caching}
 \usage{
-fetch_env_context(selection, input, env = global_env())
+fetch_env_context(
+  selection,
+  input,
+  env = global_env(),
+  document_contents = character(0),
+  include_all = FALSE,
+  cache_context = FALSE,
+  max_objects = get_converser_max_env_objects()
+)
 }
 \arguments{
 \item{selection}{Selected code string.}
@@ -12,11 +20,25 @@ fetch_env_context(selection, input, env = global_env())
 \item{input}{User prompt string.}
 
 \item{env}{Environment to inspect (defaults to \code{.GlobalEnv}).}
+
+\item{document_contents}{Optional character vector of active document lines.}
+
+\item{include_all}{Logical; if \code{TRUE} (used by \code{construct_turn()}), includes a
+manifest of all \code{.GlobalEnv} objects (up to 200) plus full \code{describe_object()}
+summaries for up to \code{max_objects} (default 50) objects in \code{.GlobalEnv} even if
+not explicitly named in the prompt. If \code{FALSE}, only describes objects explicitly
+mentioned in \code{selection} or \code{input}.}
+
+\item{cache_context}{Logical; if \code{TRUE}, tracks \code{rlang::hash()} per object in
+\code{converser_env[["cached_env_hashes"]]} so unchanged \code{.GlobalEnv} objects are
+not re-transmitted on subsequent turns of the same conversation.}
+
+\item{max_objects}{Maximum number of objects to describe in full (default \code{50L}).}
 }
 \value{
 Character vector of formatted environment descriptions.
 }
 \description{
-Extract relevant R environment context without false-positive substring matching
+Extract R environment context with expanded \code{.GlobalEnv} coverage and hash caching
 }
 \keyword{internal}

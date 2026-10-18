@@ -9,7 +9,8 @@ construct_turn(
   context = NULL,
   include_env = TRUE,
   include_error = FALSE,
-  window_lines = get_converser_window()
+  window_lines = get_converser_window(),
+  cache_context = FALSE
 )
 }
 \arguments{
@@ -17,11 +18,14 @@ construct_turn(
 
 \item{context}{RStudio document context.}
 
-\item{include_env}{Logical; whether to automatically attach matched \code{.GlobalEnv} summaries.}
+\item{include_env}{Logical; whether to automatically attach \code{.GlobalEnv} manifest and summaries.}
 
 \item{include_error}{Logical; whether to attach the most recent R error & backtrace.}
 
-\item{window_lines}{Number of surrounding code lines to include.}
+\item{window_lines}{Number of surrounding code lines to include (default \code{5000L}).}
+
+\item{cache_context}{Logical; whether to deduplicate unchanged document and \code{.GlobalEnv}
+objects across multi-turn conversation calls using \code{rlang::hash()}.}
 }
 \description{
 Construct a contextualized user turn for the LLM

@@ -408,6 +408,18 @@ api_post_chat <- function(body) {
   }
 
   chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar"))
+  converser_env[["active_chat"]] <- chat
+
+  # If this chat object has 0 prior turns, ensure the context cache starts clean
+  existing_turns <- tryCatch(chat$get_turns(), error = function(e) list())
+  if (length(existing_turns) == 0L) {
+    converser_clear_context_cache()
+  }
+
+  # Snapshot cache hashes in case the LLM request errors out or is aborted
+  prev_doc_hash <- converser_env[["cached_doc_hash"]]
+  prev_manifest_hash <- converser_env[["cached_manifest_hash"]]
+  prev_env_hashes <- converser_env[["cached_env_hashes"]]
 
   plot_data_uri <- NULL
   plot_content_obj <- NULL
@@ -438,7 +450,8 @@ api_post_chat <- function(body) {
     user_prompt = prompt_str,
     context = ctx,
     include_env = TRUE,
-    include_error = inc_err
+    include_error = inc_err,
+    cache_context = TRUE
   )
 
   resp_text <- tryCatch(
@@ -475,9 +488,23 @@ api_post_chat <- function(body) {
               fallback_chat <- get_converser_chat(register_tools = FALSE)
               strip_reasoning_from_chat(fallback_chat)
               fallback_chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar"))
-              fallback_chat$chat(turn_payload, echo = "none")
+              converser_clear_context_cache()
+              fresh_turn <- construct_turn(
+                user_prompt = prompt_str,
+                context = ctx,
+                include_env = TRUE,
+                include_error = inc_err,
+                cache_context = TRUE
+              )
+              res_fb <- fallback_chat$chat(fresh_turn, echo = "none")
+              chat <<- fallback_chat
+              res_fb
             },
             error = function(e2) {
+              # Restore cache state if the turn failed completely
+              converser_env[["cached_doc_hash"]] <- prev_doc_hash
+              converser_env[["cached_manifest_hash"]] <- prev_manifest_hash
+              converser_env[["cached_env_hashes"]] <- prev_env_hashes
               paste0("**Error communicating with LLM:** ", conditionMessage(e))
             }
           )
@@ -486,6 +513,7 @@ api_post_chat <- function(body) {
     }
   )
 
+  converser_env[["active_chat"]] <- chat
   converser_env[["last_call_chat"]] <- chat
 
   clean_md <- sanitize_llm_output(resp_text, ext = "md", strip_fences = FALSE)
