@@ -45,11 +45,13 @@ converser_sidebar <- function(viewer = c("pane", "browser")) {
   if (identical(viewer, "pane") && rstudioapi::isAvailable() && rstudioapi::hasFun("viewer")) {
     # Do NOT pass height = "maximize" so RStudio never minimizes the pane above the Viewer!
     rstudioapi::viewer(url)
+    install_viewer_guard(url)
     cli_inform(c(
       "v" = "ConverseR is open in the Viewer pane.",
       "i" = "Your R console is free: keep coding while you chat!"
     ))
   } else {
+    uninstall_viewer_guard()
     utils::browseURL(url)
     cli_inform(c("v" = "ConverseR opened in browser ({.url {url}})."))
   }
@@ -60,6 +62,7 @@ converser_sidebar <- function(viewer = c("pane", "browser")) {
 #' Stop the background ConverseR Sidebar server
 #' @export
 converser_stop_sidebar <- function() {
+  uninstall_viewer_guard()
   srv <- converser_env[["httpuv_server"]]
   if (!is.null(srv)) {
     tryCatch(httpuv::stopServer(srv), error = function(e) NULL)
@@ -68,6 +71,90 @@ converser_stop_sidebar <- function() {
     cli_inform(c("v" = "Stopped ConverseR background sidebar server."))
   }
   invisible(NULL)
+}
+
+# Viewer Pane Replacement Interception & Deferred Task Callback ---------------
+
+install_viewer_guard <- function(converser_url) {
+  orig_viewer <- converser_env[["rstudio_viewer_orig"]]
+  if (is.null(orig_viewer)) {
+    orig_viewer <- getOption("viewer")
+    if (!is.null(orig_viewer)) {
+      converser_env[["rstudio_viewer_orig"]] <- orig_viewer
+    }
+  }
+
+  if (is.null(orig_viewer)) return(invisible(NULL))
+
+  converser_env[["sidebar_active_url"]] <- converser_url
+  converser_env[["viewer_overwritten"]] <- FALSE
+
+  wrapped_viewer <- function(url, height = NULL) {
+    active_url <- converser_env[["sidebar_active_url"]] %||% ""
+    clean_host <- sub("^https?://", "", active_url)
+    is_converser <- nzchar(clean_host) && grepl(clean_host, url, fixed = TRUE)
+
+    res <- tryCatch(
+      if (is.null(height)) orig_viewer(url) else orig_viewer(url, height = height),
+      error = function(e) NULL
+    )
+
+    if (!is_converser) {
+      converser_env[["viewer_overwritten"]] <- TRUE
+      ensure_viewer_task_callback()
+    } else {
+      converser_env[["viewer_overwritten"]] <- FALSE
+      remove_viewer_task_callback()
+    }
+
+    invisible(res)
+  }
+
+  options(viewer = wrapped_viewer)
+  invisible(NULL)
+}
+
+uninstall_viewer_guard <- function() {
+  remove_viewer_task_callback()
+  orig_viewer <- converser_env[["rstudio_viewer_orig"]]
+  if (!is.null(orig_viewer)) {
+    options(viewer = orig_viewer)
+    converser_env[["rstudio_viewer_orig"]] <- NULL
+  }
+  converser_env[["viewer_overwritten"]] <- FALSE
+  invisible(NULL)
+}
+
+ensure_viewer_task_callback <- function() {
+  cb_names <- getTaskCallbackNames()
+  if (!("converser_viewer_guard" %in% cb_names)) {
+    addTaskCallback(converser_viewer_callback_handler, name = "converser_viewer_guard")
+  }
+  invisible(NULL)
+}
+
+remove_viewer_task_callback <- function() {
+  cb_names <- getTaskCallbackNames()
+  if ("converser_viewer_guard" %in% cb_names) {
+    tryCatch(removeTaskCallback("converser_viewer_guard"), error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
+converser_viewer_callback_handler <- function(expr, value, ok, visible) {
+  if (isTRUE(converser_env[["viewer_overwritten"]])) {
+    converser_env[["viewer_overwritten"]] <- FALSE
+    tryCatch(
+      cli_inform(c(
+        "i" = "The Viewer tab is now displaying HTML output.",
+        "i" = "Click {.run [converser()](ConverseR::converser())} to restore your ConverseR chat."
+      )),
+      error = function(e) {
+        message("[ConverseR] The Viewer tab is now displaying HTML output.\nType converser() to restore your ConverseR chat.")
+      }
+    )
+  }
+  FALSE
 }
 
 ensure_nonblocking_server <- function() {
@@ -1159,11 +1246,16 @@ function renderMessages(messages) {
 }
 
 function enhanceCodeBlocks(autoOpenLastDiff = false) {
-  const pres = document.querySelectorAll(".rc-msg-assistant pre");
+  const pres = Array.from(document.querySelectorAll(".rc-msg-assistant pre"));
+  let diffAutoOpened = false;
   pres.forEach((pre, idx) => {
     if (pre.parentElement && pre.parentElement.classList.contains("rc-code-wrapper")) return;
     const codeEl = pre.querySelector("code");
     const rawCode = codeEl ? codeEl.innerText : pre.innerText;
+    if (!rawCode || !rawCode.trim()) {
+      pre.remove();
+      return;
+    }
     const clsName = (codeEl && codeEl.className) ? codeEl.className.toLowerCase() : "";
     const isYaml = clsName.includes("yaml");
     const langLabel = isYaml ? "YAML (SKILL.md)" : "R Code";
@@ -1293,8 +1385,9 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
       });
     });
 
-    // If triggered from converser_inline() with "Preview Difference first", auto-open the diff drawer!
-    if (autoOpenLastDiff && idx === pres.length - 1 && diffBtn) {
+    // If triggered from converser_inline() with "Preview Difference first", auto-open the diff drawer on the valid code block!
+    if (autoOpenLastDiff && !diffAutoOpened && diffBtn) {
+      diffAutoOpened = true;
       setTimeout(() => diffBtn.click(), 80);
     }
   });

@@ -496,3 +496,66 @@ test_that("prune_chat_turn_payloads strips past turn payloads while keeping user
   expect_identical(turns_after[[4]]@text, "summary(fit)")
 })
 
+test_that("open_nonblocking_diff_review eliminates phantom empty code blocks from pre-fenced code", {
+  ConverseR:::converser_reset()
+
+  # Simulate an LLM output that already had executable chunk fences (e.g. from Quarto/Rmd)
+  fenced_proposed <- "```{r}\nfit <- lmer(y ~ x + (1|group), data = df)\n```"
+
+  # Call open_nonblocking_diff_review
+  ConverseR:::open_nonblocking_diff_review(
+    original = "old_code()",
+    proposed = fenced_proposed,
+    interface = "replace",
+    prompt = "Fit a mixed model"
+  )
+
+  msgs <- ConverseR:::converser_env[["chat_history_ui"]]
+  expect_length(msgs, 2L)
+
+  assistant_msg <- msgs[[2]]
+  expect_true(isTRUE(assistant_msg$auto_open_diff))
+
+  # The assistant HTML must contain EXACTLY ONE <pre> block, never an extra empty <pre><code></code></pre>
+  pre_count <- length(gregexpr("<pre>", assistant_msg$html)[[1]])
+  expect_identical(pre_count, 1L)
+
+  # Verify the code block does not duplicate backtick fences
+  expect_false(grepl("<pre><code[^>]*>```", assistant_msg$html))
+  expect_true(grepl("fit &lt;- lmer", assistant_msg$html, fixed = TRUE))
+})
+
+test_that("viewer guard and deferred task callback alert when another package occupies the Viewer pane", {
+  orig_opt_v <- getOption("viewer")
+  on.exit(options(viewer = orig_opt_v), add = TRUE)
+
+  mock_viewer_called <- character(0)
+  options(viewer = function(url, height = NULL) {
+    mock_viewer_called <<- c(mock_viewer_called, url)
+  })
+
+  converser_url <- "http://127.0.0.1:5678/"
+  ConverseR:::install_viewer_guard(converser_url)
+
+  # 1. Opening ConverseR itself should not flag viewer as overwritten
+  getOption("viewer")(converser_url)
+  expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+  expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
+
+  # 2. When another package (like gtsummary/gt) opens an HTML table:
+  getOption("viewer")("file:///tmp/gtsummary_table.html")
+  expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+  expect_true("converser_viewer_guard" %in% getTaskCallbackNames())
+
+  # 3. Task callback executes at end of top-level command:
+  expect_message(
+    ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
+    "The Viewer tab is now displaying HTML output"
+  )
+  expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+
+  # 4. Uninstall restores original viewer and cleans callbacks
+  ConverseR:::uninstall_viewer_guard()
+  expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
+})
+

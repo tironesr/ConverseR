@@ -267,7 +267,11 @@ open_nonblocking_diff_review <- function(original, proposed, interface = "replac
     paste0("*(Inline Edit Preview — ", mode_label, ")*: ", prompt),
     extensions = TRUE
   )
-  code_md <- paste0("```r\n", proposed, "\n```")
+  clean_code <- extract_code_from_markdown(proposed)
+  if (!nzchar(trimws(clean_code))) {
+    clean_code <- trimws(proposed)
+  }
+  code_md <- paste0("```r\n", clean_code, "\n```")
   assistant_html <- commonmark::markdown_html(code_md, extensions = TRUE)
 
   msgs <- c(
@@ -282,6 +286,7 @@ open_nonblocking_diff_review <- function(original, proposed, interface = "replac
   url <- ensure_nonblocking_server()
   if (rstudioapi::isAvailable() && rstudioapi::hasFun("viewer")) {
     rstudioapi::viewer(url)
+    install_viewer_guard(url)
     cli_inform(c(
       "v" = "ConverseR: Opened Preview Difference in the Viewer pane.",
       "i" = "Review the red/green diff and click 'Replace', 'Insert', or 'Run in Console' when ready."
