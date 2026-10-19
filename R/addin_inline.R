@@ -103,6 +103,8 @@ converser_inline <- function() {
     cli_inform(c("v" = "ConverseR: Done! (Run {.fn converser_undo} to revert in one step.)"))
   }
 
+  prune_chat_turn_payloads(assistant, latest_clean_prompt = input$text)
+
   converser_env[["last_inline_chat"]] <- assistant
   converser_env[["last_call_chat"]] <- assistant
   converser_env[["active_chat"]] <- assistant

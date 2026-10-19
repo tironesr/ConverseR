@@ -409,6 +409,7 @@ api_post_chat <- function(body) {
   }
 
   chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar"))
+  prune_chat_turn_payloads(chat)
   converser_env[["active_chat"]] <- chat
 
   # If this chat object has 0 prior turns, ensure the context cache starts clean
@@ -519,6 +520,10 @@ api_post_chat <- function(body) {
       )
     }
   )
+
+  if (!grepl("^\\*\\*Error communicating with LLM:\\*\\*", resp_text)) {
+    prune_chat_turn_payloads(chat, latest_clean_prompt = prompt_str)
+  }
 
   converser_env[["active_chat"]] <- chat
   converser_env[["last_call_chat"]] <- chat

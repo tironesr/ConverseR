@@ -398,3 +398,101 @@ test_that("fetch_env_context caps unmentioned objects to top 2-3 active datasets
   expect_true(grepl("# df4: <data.frame [5 rows x 1 cols]>", ctx_mention_str, fixed = TRUE))
 })
 
+test_that("extract_clean_user_prompt extracts the clean user question from heavy turn payloads", {
+  # 1. Standard prompt with code context and environment
+  raw_payload <- paste(
+    "The user is currently working in this .R file (5000 lines):",
+    "`````",
+    paste(rep("x <- rnorm(100)", 100), collapse = "\n"),
+    "`````",
+    "",
+    "The user made the following request:",
+    "",
+    "> How do I do a simple lmer() model",
+    "",
+    "Objects in the user's R Global Environment (.GlobalEnv):",
+    "`````",
+    "# df: <data.frame [100 x 5]>",
+    "`````",
+    sep = "\n"
+  )
+
+  clean <- ConverseR:::extract_clean_user_prompt(raw_payload)
+  expect_identical(clean, "How do I do a simple lmer() model")
+
+  # 2. Multiline user prompt with highlighted selection
+  multiline_payload <- paste(
+    "The user made the following request:",
+    "",
+    "> Line 1 of request",
+    "Line 2 of request",
+    "",
+    "The user has highlighted the following selection to apply the request to:",
+    "`````",
+    "selection_code()",
+    "`````",
+    sep = "\n"
+  )
+
+  clean_multi <- ConverseR:::extract_clean_user_prompt(multiline_payload)
+  expect_identical(clean_multi, "Line 1 of request\nLine 2 of request")
+
+  # 3. Plain string already clean
+  expect_identical(ConverseR:::extract_clean_user_prompt("Plain text question"), "Plain text question")
+})
+
+test_that("prune_chat_turn_payloads strips past turn payloads while keeping user dialogue intact (Option #3)", {
+  skip_if_not_installed("ellmer")
+
+  chat <- ellmer::chat_openrouter(api_key = "fake_test_key")
+
+  heavy_turn_payload <- paste(
+    "The user is currently working in this .R file (3500 lines):",
+    "`````",
+    paste(rep("x <- 1", 500), collapse = "\n"),
+    "`````",
+    "",
+    "The user made the following request:",
+    "",
+    "> Fit an OLS regression",
+    "",
+    "Objects in the user's R Global Environment (.GlobalEnv):",
+    "`````",
+    "# - dat: <data.frame [50 x 3]>",
+    "`````",
+    sep = "\n"
+  )
+
+  t1 <- ellmer:::Turn(
+    role = "user",
+    contents = list(ellmer:::ContentText(heavy_turn_payload))
+  )
+  t2 <- ellmer:::Turn(
+    role = "assistant",
+    contents = list(ellmer:::ContentText("fit <- lm(y ~ x, data = dat)"))
+  )
+  t3 <- ellmer:::Turn(
+    role = "user",
+    contents = list(ellmer:::ContentText("The user is currently working...\n\nThe user made the following request:\n\n> Now summarize fit\n\nObjects in .GlobalEnv:"))
+  )
+  t4 <- ellmer:::Turn(
+    role = "assistant",
+    contents = list(ellmer:::ContentText("summary(fit)"))
+  )
+
+  chat$set_turns(list(t1, t2, t3, t4))
+
+  # Prior to pruning, Turn 1 has thousands of characters
+  expect_gt(nchar(chat$get_turns()[[1]]@text), 1000L)
+
+  # Execute pruning: cleans Turn 1 via extract_clean_user_prompt() and Turn 3 via explicit prompt string
+  ConverseR:::prune_chat_turn_payloads(chat, latest_clean_prompt = "Now summarize fit")
+
+  turns_after <- chat$get_turns()
+  expect_length(turns_after, 4L)
+  expect_identical(turns_after[[1]]@text, "Fit an OLS regression")
+  expect_identical(turns_after[[2]]@text, "fit <- lm(y ~ x, data = dat)")
+  expect_identical(turns_after[[3]]@text, "Now summarize fit")
+  expect_identical(turns_after[[4]]@text, "summary(fit)")
+})
+
