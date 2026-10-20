@@ -76,18 +76,25 @@ converser_stop_sidebar <- function() {
 # Viewer Pane Replacement Interception & Deferred Task Callback ---------------
 
 install_viewer_guard <- function(converser_url) {
+  converser_env[["sidebar_active_url"]] <- converser_url
+  converser_env[["viewer_overwritten"]] <- FALSE
+  ensure_viewer_task_callback()
+
+  # 1. Wrap getOption("viewer")
   orig_viewer <- converser_env[["rstudio_viewer_orig"]]
   if (is.null(orig_viewer)) {
     orig_viewer <- getOption("viewer")
-    if (!is.null(orig_viewer)) {
-      converser_env[["rstudio_viewer_orig"]] <- orig_viewer
+    if (is.null(orig_viewer)) {
+      orig_viewer <- function(url, height = NULL) {
+        if (rstudioapi::isAvailable() && rstudioapi::hasFun("viewer")) {
+          rstudioapi::viewer(url, height = height)
+        } else {
+          utils::browseURL(url)
+        }
+      }
     }
+    converser_env[["rstudio_viewer_orig"]] <- orig_viewer
   }
-
-  if (is.null(orig_viewer)) return(invisible(NULL))
-
-  converser_env[["sidebar_active_url"]] <- converser_url
-  converser_env[["viewer_overwritten"]] <- FALSE
 
   wrapped_viewer <- function(url, height = NULL) {
     active_url <- converser_env[["sidebar_active_url"]] %||% ""
@@ -101,16 +108,80 @@ install_viewer_guard <- function(converser_url) {
 
     if (!is_converser) {
       converser_env[["viewer_overwritten"]] <- TRUE
-      ensure_viewer_task_callback()
     } else {
       converser_env[["viewer_overwritten"]] <- FALSE
-      remove_viewer_task_callback()
     }
 
     invisible(res)
   }
 
   options(viewer = wrapped_viewer)
+
+  # 2. Wrap rstudioapi::viewer in namespace if available
+  if (is.null(converser_env[["rstudioapi_viewer_orig"]])) {
+    orig_api_viewer <- tryCatch(rstudioapi::viewer, error = function(e) NULL)
+    if (!is.null(orig_api_viewer)) {
+      converser_env[["rstudioapi_viewer_orig"]] <- orig_api_viewer
+      wrapped_api_viewer <- function(url, height = NULL) {
+        active_url <- converser_env[["sidebar_active_url"]] %||% ""
+        clean_host <- sub("^https?://", "", active_url)
+        is_converser <- nzchar(clean_host) && grepl(clean_host, url, fixed = TRUE)
+
+        res <- tryCatch(
+          if (is.null(height)) orig_api_viewer(url) else orig_api_viewer(url, height = height),
+          error = function(e) NULL
+        )
+
+        if (!is_converser) {
+          converser_env[["viewer_overwritten"]] <- TRUE
+        } else {
+          converser_env[["viewer_overwritten"]] <- FALSE
+        }
+
+        invisible(res)
+      }
+
+      tryCatch({
+        unlockBinding("viewer", asNamespace("rstudioapi"))
+        assign("viewer", wrapped_api_viewer, envir = asNamespace("rstudioapi"))
+      }, error = function(e) NULL)
+    }
+  }
+
+  # 3. Wrap .rs.api.viewer in tools:rstudio if present
+  if ("tools:rstudio" %in% search() && is.null(converser_env[["tools_rs_viewer_orig"]])) {
+    tools_env <- as.environment("tools:rstudio")
+    if (exists(".rs.api.viewer", envir = tools_env, inherits = FALSE)) {
+      orig_rs_viewer <- get(".rs.api.viewer", envir = tools_env)
+      converser_env[["tools_rs_viewer_orig"]] <- orig_rs_viewer
+      wrapped_rs_viewer <- function(url, height = NULL) {
+        active_url <- converser_env[["sidebar_active_url"]] %||% ""
+        clean_host <- sub("^https?://", "", active_url)
+        is_converser <- nzchar(clean_host) && grepl(clean_host, url, fixed = TRUE)
+
+        res <- tryCatch(
+          if (is.null(height)) orig_rs_viewer(url) else orig_rs_viewer(url, height = height),
+          error = function(e) NULL
+        )
+
+        if (!is_converser) {
+          converser_env[["viewer_overwritten"]] <- TRUE
+        } else {
+          converser_env[["viewer_overwritten"]] <- FALSE
+        }
+
+        invisible(res)
+      }
+
+      tryCatch({
+        if (bindingIsLocked(".rs.api.viewer", tools_env)) {
+          unlockBinding(".rs.api.viewer", tools_env)
+        }
+        assign(".rs.api.viewer", wrapped_rs_viewer, envir = tools_env)
+      }, error = function(e) NULL)
+    }
+  }
+
   invisible(NULL)
 }
 
@@ -121,6 +192,28 @@ uninstall_viewer_guard <- function() {
     options(viewer = orig_viewer)
     converser_env[["rstudio_viewer_orig"]] <- NULL
   }
+
+  orig_api_viewer <- converser_env[["rstudioapi_viewer_orig"]]
+  if (!is.null(orig_api_viewer)) {
+    tryCatch({
+      unlockBinding("viewer", asNamespace("rstudioapi"))
+      assign("viewer", orig_api_viewer, envir = asNamespace("rstudioapi"))
+      converser_env[["rstudioapi_viewer_orig"]] <- NULL
+    }, error = function(e) NULL)
+  }
+
+  orig_rs_viewer <- converser_env[["tools_rs_viewer_orig"]]
+  if (!is.null(orig_rs_viewer) && "tools:rstudio" %in% search()) {
+    tryCatch({
+      tools_env <- as.environment("tools:rstudio")
+      if (bindingIsLocked(".rs.api.viewer", tools_env)) {
+        unlockBinding(".rs.api.viewer", tools_env)
+      }
+      assign(".rs.api.viewer", orig_rs_viewer, envir = tools_env)
+      converser_env[["tools_rs_viewer_orig"]] <- NULL
+    }, error = function(e) NULL)
+  }
+
   converser_env[["viewer_overwritten"]] <- FALSE
   invisible(NULL)
 }
@@ -154,7 +247,7 @@ converser_viewer_callback_handler <- function(expr, value, ok, visible) {
       }
     )
   }
-  FALSE
+  TRUE
 }
 
 ensure_nonblocking_server <- function() {

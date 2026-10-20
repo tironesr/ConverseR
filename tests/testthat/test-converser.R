@@ -540,21 +540,33 @@ test_that("viewer guard and deferred task callback alert when another package oc
   # 1. Opening ConverseR itself should not flag viewer as overwritten
   getOption("viewer")(converser_url)
   expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
-  expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
+  expect_true("converser_viewer_guard" %in% getTaskCallbackNames())
 
-  # 2. When another package (like gtsummary/gt) opens an HTML table:
+  # 2. When another package (like gtsummary/gt) opens an HTML table via getOption("viewer"):
   getOption("viewer")("file:///tmp/gtsummary_table.html")
   expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
-  expect_true("converser_viewer_guard" %in% getTaskCallbackNames())
 
   # 3. Task callback executes at end of top-level command:
   expect_message(
-    ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
+    res_cb <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
     "The Viewer tab is now displaying HTML output"
   )
+  expect_true(isTRUE(res_cb))
   expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
 
-  # 4. Uninstall restores original viewer and cleans callbacks
+  # 4. When another package calls rstudioapi::viewer directly:
+  if (rstudioapi::isAvailable() || !is.null(ConverseR:::converser_env[["rstudioapi_viewer_orig"]])) {
+    rstudioapi::viewer("file:///tmp/another_table.html")
+    expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+    expect_message(
+      res_cb2 <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
+      "The Viewer tab is now displaying HTML output"
+    )
+    expect_true(isTRUE(res_cb2))
+    expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+  }
+
+  # 5. Uninstall restores original viewer and cleans callbacks
   ConverseR:::uninstall_viewer_guard()
   expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
 })
