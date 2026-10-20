@@ -78,6 +78,7 @@ converser_stop_sidebar <- function() {
 install_viewer_guard <- function(converser_url) {
   converser_env[["sidebar_active_url"]] <- converser_url
   converser_env[["viewer_overwritten"]] <- FALSE
+  converser_env[["viewer_timer_scheduled"]] <- FALSE
   ensure_viewer_task_callback()
 
   # 1. Wrap getOption("viewer")
@@ -215,6 +216,7 @@ uninstall_viewer_guard <- function() {
   }
 
   converser_env[["viewer_overwritten"]] <- FALSE
+  converser_env[["viewer_timer_scheduled"]] <- FALSE
   invisible(NULL)
 }
 
@@ -234,18 +236,61 @@ remove_viewer_task_callback <- function() {
   invisible(NULL)
 }
 
-converser_viewer_callback_handler <- function(expr, value, ok, visible) {
+converser_deliver_viewer_notice <- function() {
+  if (!isTRUE(converser_env[["viewer_overwritten"]])) {
+    return(invisible(NULL))
+  }
+  converser_env[["viewer_overwritten"]] <- FALSE
+  converser_env[["viewer_timer_scheduled"]] <- FALSE
+
+  tryCatch(
+    cli_inform(c(
+      "i" = "The Viewer tab is now displaying HTML output.",
+      "i" = "Click {.run [converser()](ConverseR::converser())} to restore your ConverseR chat."
+    )),
+    error = function(e) {
+      message("[ConverseR] The Viewer tab is now displaying HTML output.\nType converser() to restore your ConverseR chat.")
+    }
+  )
+  invisible(NULL)
+}
+
+converser_debounce_notice <- function(delay = 0.35) {
+  converser_env[["viewer_last_task_time"]] <- Sys.time()
+
+  if (isTRUE(converser_env[["viewer_timer_scheduled"]])) {
+    return(invisible(NULL))
+  }
+
+  converser_env[["viewer_timer_scheduled"]] <- TRUE
+
+  check_and_fire <- function() {
+    if (!isTRUE(converser_env[["viewer_overwritten"]])) {
+      converser_env[["viewer_timer_scheduled"]] <- FALSE
+      return(invisible(NULL))
+    }
+
+    last_time <- converser_env[["viewer_last_task_time"]]
+    elapsed <- if (!is.null(last_time)) as.numeric(difftime(Sys.time(), last_time, units = "secs")) else delay
+
+    if (elapsed >= delay) {
+      converser_deliver_viewer_notice()
+    } else {
+      remaining <- max(0.05, delay - elapsed)
+      later::later(check_and_fire, delay = remaining)
+    }
+  }
+
+  later::later(check_and_fire, delay = delay)
+}
+
+converser_viewer_callback_handler <- function(expr, value, ok, visible, now = FALSE) {
   if (isTRUE(converser_env[["viewer_overwritten"]])) {
-    converser_env[["viewer_overwritten"]] <- FALSE
-    tryCatch(
-      cli_inform(c(
-        "i" = "The Viewer tab is now displaying HTML output.",
-        "i" = "Click {.run [converser()](ConverseR::converser())} to restore your ConverseR chat."
-      )),
-      error = function(e) {
-        message("[ConverseR] The Viewer tab is now displaying HTML output.\nType converser() to restore your ConverseR chat.")
-      }
-    )
+    if (isTRUE(now)) {
+      converser_deliver_viewer_notice()
+    } else {
+      converser_debounce_notice(delay = 0.35)
+    }
   }
   TRUE
 }

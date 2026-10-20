@@ -546,27 +546,42 @@ test_that("viewer guard and deferred task callback alert when another package oc
   getOption("viewer")("file:///tmp/gtsummary_table.html")
   expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
 
-  # 3. Task callback executes at end of top-level command:
+  # 3. Synchronous task callback execution (now = TRUE):
   expect_message(
-    res_cb <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
+    res_cb <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE, now = TRUE),
     "The Viewer tab is now displaying HTML output"
   )
   expect_true(isTRUE(res_cb))
   expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
 
-  # 4. When another package calls rstudioapi::viewer directly:
+  # 4. Debounced deferred delivery at end of command sequence (now = FALSE):
+  getOption("viewer")("file:///tmp/gtsummary_table.html")
+  expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+  # Task callback runs after intermediate statement in a chunk/script:
+  ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE, now = FALSE)
+  # Still marked overwritten, alert deferred
+  expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+  # Let debounce timer elapse and process idle event loop
+  Sys.sleep(0.4)
+  expect_message(
+    later::run_now(0),
+    "The Viewer tab is now displaying HTML output"
+  )
+  expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
+
+  # 5. When another package calls rstudioapi::viewer directly:
   if (rstudioapi::isAvailable() || !is.null(ConverseR:::converser_env[["rstudioapi_viewer_orig"]])) {
     rstudioapi::viewer("file:///tmp/another_table.html")
     expect_true(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
     expect_message(
-      res_cb2 <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE),
+      res_cb2 <- ConverseR:::converser_viewer_callback_handler(NULL, NULL, TRUE, TRUE, now = TRUE),
       "The Viewer tab is now displaying HTML output"
     )
     expect_true(isTRUE(res_cb2))
     expect_false(isTRUE(ConverseR:::converser_env[["viewer_overwritten"]]))
   }
 
-  # 5. Uninstall restores original viewer and cleans callbacks
+  # 6. Uninstall restores original viewer and cleans callbacks
   ConverseR:::uninstall_viewer_guard()
   expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
 })
