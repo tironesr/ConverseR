@@ -771,6 +771,11 @@ api_post_diff <- function(body) {
   sel_text <- if (!is.null(ctx)) (rstudioapi::primary_selection(ctx)$text %||% "") else ""
   proposed <- body$code %||% ""
 
+  # If user's selection does not explicitly contain chunk headers, strip any outer fences from proposed
+  if (!grepl("^\\s*```\\{", sel_text)) {
+    proposed <- strip_chunk_fences(proposed)
+  }
+
   diff_html <- as.character(render_code_diff_html(sel_text, proposed))
   list(
     ok = TRUE,
@@ -792,8 +797,21 @@ api_post_apply <- function(body) {
   }
 
   sel <- rstudioapi::primary_selection(ctx)
-  if (identical(mode, "replace") && !nzchar(sel$text %||% "")) {
+  sel_text <- sel$text %||% ""
+  if (identical(mode, "replace") && !nzchar(sel_text)) {
     return(list(ok = FALSE, error = "Nothing is highlighted in the script to replace. Highlight code first, click 'Run in Console', or click 'Insert'."))
+  }
+
+  ext <- file_extension(ctx$path)
+  start_row <- sel$range$start[["row"]]
+
+  # Check if selection explicitly contains chunk header
+  has_chunk_header <- grepl("^\\s*```\\{", sel_text)
+  in_chunk <- identical(ext, "r") || is_cursor_inside_chunk(ctx$contents, start_row)
+
+  # Prevent breaking existing chunks: strip chunk opening/closing delimiters when modifying code inside a chunk
+  if (in_chunk && !has_chunk_header) {
+    code_to_write <- strip_chunk_fences(code_to_write)
   }
 
   converser_env[["last_edit"]] <- list(
@@ -1396,6 +1414,24 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     }
     const clsName = (codeEl && codeEl.className) ? codeEl.className.toLowerCase() : "";
     const isYaml = clsName.includes("yaml");
+
+    let cleanCode = rawCode.trim();
+    if (!isYaml) {
+      for (let p = 0; p < 2; p++) {
+        cleanCode = cleanCode.replace(/^\\s*```(?:\\{[^}]*\\}|[a-zA-Z0-9_-]*)\\s*\\r?\\n/, "");
+        cleanCode = cleanCode.replace(/\\r?\\n```\\s*$/, "");
+        cleanCode = cleanCode.replace(/^\\s*```\\s*$/, "");
+      }
+      cleanCode = cleanCode.trim();
+      if (!cleanCode) {
+        pre.remove();
+        return;
+      }
+      if (cleanCode !== rawCode.trim() && codeEl) {
+        codeEl.innerText = cleanCode;
+      }
+    }
+
     const langLabel = isYaml ? "YAML (SKILL.md)" : "R Code";
     const msgContainer = pre.closest(".rc-msg-assistant");
     const preferredMode = msgContainer ? (msgContainer.getAttribute("data-preferred-mode") || "") : "";
@@ -1459,7 +1495,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
         const res = await fetch("/api/diff", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: rawCode.trim() })
+          body: JSON.stringify({ code: cleanCode })
         });
         const data = await res.json();
         if (data.ok) {
@@ -1488,7 +1524,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
         await toggleSettings();
         const box = document.getElementById("cfg_skill_text");
         if (box) {
-          box.value = rawCode.trim();
+          box.value = cleanCode;
           box.focus();
         }
         const st = document.getElementById("settings_status");
@@ -1502,7 +1538,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     const consoleBtn = toolbar.querySelector(\'[data-action="console"]\');
     if (consoleBtn) {
       consoleBtn.addEventListener("click", async () => {
-        await runInConsole(rawCode.trim(), consoleBtn);
+        await runInConsole(cleanCode, consoleBtn);
       });
     }
 
@@ -1510,7 +1546,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
     const copyBtn = toolbar.querySelector(\'[data-action="copy"]\');
     if (copyBtn) {
       copyBtn.addEventListener("click", async () => {
-        await copyTextRobust(rawCode.trim(), copyBtn);
+        await copyTextRobust(cleanCode, copyBtn);
       });
     }
 
@@ -1519,7 +1555,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
       btn.addEventListener("click", async () => {
         if (btn.disabled) return;
         const mode = btn.getAttribute("data-mode");
-        await applyCode(mode, rawCode.trim());
+        await applyCode(mode, cleanCode);
       });
     });
 

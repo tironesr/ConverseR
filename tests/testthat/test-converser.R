@@ -110,6 +110,41 @@ test_that("extract_code_from_markdown and render_code_diff_html work accurately"
   expect_true(grepl("rc-diff-add", diff_html, fixed = TRUE))
 })
 
+test_that("strip_chunk_fences and is_cursor_inside_chunk prevent breaking chunks", {
+  # strip_chunk_fences handles named chunks, chunk options, and nested fences
+  expect_equal(strip_chunk_fences("```{r test}\nx <- 1:10\n```"), "x <- 1:10")
+  expect_equal(strip_chunk_fences("```{r test, fig.width=7}\nx <- 1:10\n```"), "x <- 1:10")
+  expect_equal(strip_chunk_fences("```{r, echo=FALSE}\nx <- 1:10\n```"), "x <- 1:10")
+  expect_equal(strip_chunk_fences("```r\nx <- 1:10\n```"), "x <- 1:10")
+  expect_equal(strip_chunk_fences("x <- 1:10"), "x <- 1:10")
+  expect_equal(strip_chunk_fences("```r\n```{r test}\nx <- 1:10\n```\n```"), "x <- 1:10")
+
+  # extract_code_from_markdown strips nested chunk fences from model output
+  nested_md <- "```r\n```{r test}\nx <- 1:10\ny <- x * 2\n```\n```"
+  expect_equal(extract_code_from_markdown(nested_md), "x <- 1:10\ny <- x * 2")
+
+  # is_cursor_inside_chunk accurately detects whether row is inside an existing chunk
+  doc_lines <- c(
+    "# Title",
+    "",
+    "Prose line 3",
+    "```{r chunk1}",
+    "x <- 1",
+    "y <- 2",
+    "```",
+    "Prose line 8",
+    "```{r chunk2, eval=FALSE}",
+    "plot(x, y)",
+    "```"
+  )
+
+  expect_false(is_cursor_inside_chunk(doc_lines, 3))
+  expect_true(is_cursor_inside_chunk(doc_lines, 5))
+  expect_true(is_cursor_inside_chunk(doc_lines, 6))
+  expect_false(is_cursor_inside_chunk(doc_lines, 8))
+  expect_true(is_cursor_inside_chunk(doc_lines, 10))
+})
+
 test_that("SKILL.md and bundled .zip skill archives are extracted and injected into system prompt", {
   old_skill <- getOption("converser.skill_text")
   old_file <- getOption("converser.skill_file")

@@ -31,6 +31,14 @@ stream_to_editor <- function(
 
   # Save full document snapshot for one-step `converser_undo()`
   primary_sel <- rstudioapi::primary_selection(context)
+  sel_text <- primary_sel$text %||% ""
+  start_row <- primary_sel$range$start[["row"]]
+
+  # Check if writing inside an existing chunk or regular .R script
+  has_chunk_header <- grepl("^\\s*```\\{", sel_text)
+  in_chunk <- identical(ext, "r") || is_cursor_inside_chunk(context$contents, start_row)
+  should_strip_fences <- in_chunk && !has_chunk_header
+
   converser_env[["last_edit"]] <- list(
     doc_id = context$id,
     full_contents = context$contents,
@@ -60,7 +68,7 @@ stream_to_editor <- function(
 
             now <- as.numeric(Sys.time())
             if ((now - last_update_time) >= throttle_sec) {
-              clean_so_far <- sanitize_llm_output(raw_accum, ext = ext)
+              clean_so_far <- sanitize_llm_output(raw_accum, ext = ext, strip_fences = should_strip_fences)
               if (nzchar(clean_so_far)) {
                 active_range <- write_buffered_chunk(
                   text = clean_so_far,
@@ -76,7 +84,10 @@ stream_to_editor <- function(
       }
 
       # Final clean write once streaming completes
-      final_text <- sanitize_llm_output(raw_accum, ext = ext)
+      final_text <- sanitize_llm_output(raw_accum, ext = ext, strip_fences = should_strip_fences)
+      if (isTRUE(should_strip_fences)) {
+        final_text <- strip_chunk_fences(final_text)
+      }
       final_payload <- sub("\n$", "", paste0(final_text, remainder))
 
       rstudioapi::modifyRange(

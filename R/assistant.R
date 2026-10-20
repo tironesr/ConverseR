@@ -85,12 +85,21 @@ construct_system_prompt <- function(
         "<thinking> tags in your final output. Any necessary brief notes must be R comments (#)."
       )
     } else if (ext %in% c("qmd", "rmd")) {
-      paste0(
-        "CRITICAL OUTPUT FORMAT: You are streaming directly into a Quarto/RMarkdown (.",
-        ext, ") document. When generating executable R code blocks outside an existing ",
-        "chunk, use standard executable chunk syntax ` ```{r} ` (with curly braces), ",
-        "NOT ` ```r `. Provide only the requested content with no conversational wrapper."
-      )
+      if (has_selection) {
+        paste0(
+          "CRITICAL OUTPUT FORMAT: You are streaming replacement code directly into a Quarto/RMarkdown (.",
+          ext, ") document where the user has highlighted code. Provide ONLY pure, executable R code ",
+          "without chunk opening delimiters (no ```{r} or ```{r label}), no closing delimiters (no ```), ",
+          "no surrounding markdown fences, and no conversational wrapper."
+        )
+      } else {
+        paste0(
+          "CRITICAL OUTPUT FORMAT: You are streaming directly into a Quarto/RMarkdown (.",
+          ext, ") document. When generating executable R code blocks outside an existing ",
+          "chunk, use standard executable chunk syntax ` ```{r} ` (with curly braces), ",
+          "NOT ` ```r `. Provide only the requested content with no conversational wrapper."
+        )
+      }
     } else {
       paste0(
         "CRITICAL OUTPUT FORMAT: Provide only the requested code or text with no ",
@@ -102,7 +111,7 @@ construct_system_prompt <- function(
       paste0(
         "\n\nYour task is to apply the user's request to their selected text. ",
         "Return ONLY the replacement text for the selection-no surrounding context, ",
-        "no explanation, no outer fences."
+        "no explanation, no outer fences, and never include chunk delimiters (no ```{r} or ```)."
       )
     } else {
       ""
@@ -117,6 +126,10 @@ construct_system_prompt <- function(
       "When providing code that modifies or replaces the user's active selection or script, ",
       "always place the complete, ready-to-run R code inside a standard fenced code block ",
       "(```r ... ```) so the user can one-click Run in Console, Preview Difference, Insert, or Replace. ",
+      "CHUNK AND SELECTION INTEGRITY: When modifying, updating, or replacing code inside an existing ",
+      "R code chunk or script, place only the pure R code statements inside your ```r ... ``` code block. ",
+      "NEVER nest ```{r ...} opening fences or ``` closing fences inside the ```r ... ``` block, ",
+      "so inserting or replacing never breaks existing chunks. ",
       "CRITICAL RULE FOR SKILL.MD GENERATION: Whenever the user asks you to generate, create, or draft ",
       "a `SKILL.md` file (or coding skill specification), you MUST output the ENTIRE skill inside a ",
       "SINGLE ```yaml ... ``` code chunk. Format the entire skill as clean YAML (using YAML keys like ",
@@ -307,11 +320,9 @@ sanitize_llm_output <- function(text, ext = "r", strip_fences = (identical(ext, 
   out <- gsub("^\\s*`````[a-zA-Z0-9_{}]*\\n?", "", out)
   out <- gsub("\\n?`````\\s*$", "", out)
 
-  # 4. In .R files (or when strip_fences = TRUE), strip outer triple-backtick code fences
+  # 4. In .R files (or when strip_fences = TRUE), strip outer triple-backtick code fences / chunk headers
   if (isTRUE(strip_fences)) {
-    out <- gsub("^\\s*```[a-zA-Z0-9_{}]*\\s*\r?\n", "", out)
-    out <- gsub("\r?\n```\\s*$", "", out)
-    out <- gsub("^\\s*```\\s*$", "", out)
+    out <- strip_chunk_fences(out)
   } else if (ext %in% c("qmd", "rmd")) {
     out <- gsub("(?m)^(\\s*)```r\\s*$", "\\1```{r}", out, perl = TRUE)
   }
@@ -335,7 +346,7 @@ extract_code_from_markdown <- function(markdown_text) {
   matches <- regmatches(cleaned, gregexpr(pattern, cleaned, perl = TRUE))[[1]]
 
   if (length(matches) == 0) {
-    return(trimws(sanitize_llm_output(cleaned, ext = "r", strip_fences = TRUE)))
+    return(trimws(strip_chunk_fences(cleaned)))
   }
 
   blocks <- vapply(
@@ -346,7 +357,9 @@ extract_code_from_markdown <- function(markdown_text) {
     character(1)
   )
 
-  paste(blocks, collapse = "\n\n")
+  # Strip any nested or stray chunk delimiters (e.g. ```{r test})
+  cleaned_blocks <- vapply(blocks, strip_chunk_fences, character(1))
+  paste(cleaned_blocks, collapse = "\n\n")
 }
 
 # Multi-Turn Historical Context Pruning (Option #3) ----------------------------

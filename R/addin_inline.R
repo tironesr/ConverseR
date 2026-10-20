@@ -83,7 +83,17 @@ converser_inline <- function() {
   if (isTRUE(input$preview_diff) && has_selection) {
     cli_inform(c("i" = "ConverseR: Generating code for Preview Difference..."))
     raw_resp <- invoke_chat_with_fallback(assistant, turn, context = context, mode = "inline", has_selection = has_selection)
-    proposed_code <- sanitize_llm_output(raw_resp, ext = file_extension(context$path))
+
+    ext <- file_extension(context$path)
+    start_row <- rstudioapi::primary_selection(context)$range$start[["row"]]
+    has_chunk_header <- grepl("^\\s*```\\{", sel_text)
+    in_chunk <- identical(ext, "r") || is_cursor_inside_chunk(context$contents, start_row)
+    should_strip_fences <- in_chunk && !has_chunk_header
+
+    proposed_code <- sanitize_llm_output(raw_resp, ext = ext, strip_fences = should_strip_fences)
+    if (isTRUE(should_strip_fences)) {
+      proposed_code <- strip_chunk_fences(proposed_code)
+    }
 
     # Open the non-blocking Viewer pane diff reviewer instead of a nested runGadget()!
     # This completely eliminates RStudio's "Terminate R" modal popup bug.
@@ -270,6 +280,9 @@ open_nonblocking_diff_review <- function(original, proposed, interface = "replac
   clean_code <- extract_code_from_markdown(proposed)
   if (!nzchar(trimws(clean_code))) {
     clean_code <- trimws(proposed)
+  }
+  if (!grepl("^\\s*```\\{", original)) {
+    clean_code <- strip_chunk_fences(clean_code)
   }
   code_md <- paste0("```r\n", clean_code, "\n```")
   assistant_html <- commonmark::markdown_html(code_md, extensions = TRUE)

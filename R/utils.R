@@ -911,3 +911,48 @@ is_positron <- function() {
 global_env <- function() {
   .GlobalEnv
 }
+
+#' Strip outer chunk opening and closing fences from code
+#'
+#' @param text Code string that may contain ```{r ...} or ``` fences.
+#' @returns Cleaned code string without outer chunk/code fences.
+#' @export
+strip_chunk_fences <- function(text) {
+  if (is.null(text) || !nzchar(trimws(text))) {
+    return("")
+  }
+  out <- text
+  for (i in 1:2) {
+    out <- gsub("^\\s*```(?:\\{[^}]*\\}|[a-zA-Z0-9_-]*)\\s*\r?\n", "", out, perl = TRUE)
+    out <- gsub("\r?\n```\\s*$", "", out, perl = TRUE)
+    out <- gsub("^\\s*```\\s*$", "", out)
+  }
+  trimws(out)
+}
+
+#' Check if an editor cursor or selection row is inside an existing code chunk
+#'
+#' @param contents Character vector of lines in the document.
+#' @param row 1-based line number of the cursor or selection start.
+#' @returns Logical TRUE if inside an existing code chunk, FALSE otherwise.
+#' @export
+is_cursor_inside_chunk <- function(contents, row) {
+  if (is.null(contents) || length(contents) == 0 || is.null(row) || row <= 1) {
+    if (!is.null(contents) && length(contents) >= 1 && grepl("^\\s*```\\{", contents[1])) {
+      return(TRUE)
+    }
+    return(FALSE)
+  }
+
+  max_r <- min(as.integer(row), length(contents))
+  for (r in seq(max_r, 1, by = -1)) {
+    line <- contents[r]
+    if (grepl("^\\s*```\\{", line)) {
+      return(TRUE)
+    }
+    if (r < max_r && grepl("^\\s*```\\s*$", line)) {
+      return(FALSE)
+    }
+  }
+  FALSE
+}
