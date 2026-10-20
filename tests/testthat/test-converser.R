@@ -227,6 +227,8 @@ test_that("non-blocking httpuv sidebar server serves 200 OK HTML, Top 20 OpenRou
   expect_true(grepl("Share Plot", res_html$body, fixed = TRUE))
   expect_true(grepl("Preview Difference", res_html$body, fixed = TRUE))
   expect_true(grepl("Run in Console", res_html$body, fixed = TRUE))
+  expect_true(grepl("targetRect.top - boxRect.top + box.scrollTop", res_html$body, fixed = TRUE))
+  expect_false(grepl("renderMessages[^{]*\\{[^}]*box\\.scrollTop = box\\.scrollHeight;", res_html$body))
 
   sys_prompt <- ConverseR:::construct_system_prompt(context = NULL, mode = "sidebar")
   expect_true(grepl("SINGLE ```yaml ... ``` code chunk", sys_prompt, fixed = TRUE))

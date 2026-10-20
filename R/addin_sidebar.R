@@ -1376,7 +1376,7 @@ async function refreshSelectionState() {
   }
 }
 
-function renderMessages(messages) {
+function renderMessages(messages, scrollBehavior = "smooth") {
   const box = document.getElementById("chat_box");
   if (!messages || messages.length === 0) {
     box.innerHTML = `<div class="rc-empty">
@@ -1385,6 +1385,7 @@ function renderMessages(messages) {
         ConverseR automatically incorporates your active script context and relevant objects from <code>.GlobalEnv</code>.
       </div>
     </div>`;
+    box.scrollTop = 0;
     return;
   }
 
@@ -1398,7 +1399,26 @@ function renderMessages(messages) {
 
   enhanceCodeBlocks(autoOpenLastDiff);
   updateReplaceButtonsState(hasEditorSelection);
-  box.scrollTop = box.scrollHeight;
+
+  // Position viewport at the TOP of the new assistant message rather than pulling down to the bottom
+  const assistantMsgs = box.querySelectorAll(".rc-msg-assistant");
+  const targetEl = assistantMsgs.length > 0
+    ? assistantMsgs[assistantMsgs.length - 1]
+    : box.lastElementChild;
+
+  if (targetEl) {
+    requestAnimationFrame(() => {
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+      const targetTop = targetRect.top - boxRect.top + box.scrollTop;
+      box.scrollTo({
+        top: Math.max(0, targetTop - 8),
+        behavior: scrollBehavior
+      });
+    });
+  } else {
+    box.scrollTop = 0;
+  }
 }
 
 function enhanceCodeBlocks(autoOpenLastDiff = false) {
@@ -1828,7 +1848,7 @@ async function loadState() {
     document.getElementById("skill_badge").classList.toggle("active", !!data.has_skill);
     hasEditorSelection = !!data.has_selection;
     if (data.settings) populateSettingsForm(data.settings);
-    renderMessages(data.messages || []);
+    renderMessages(data.messages || [], "auto");
     fetchOpenRouterModels(false);
   } catch (e) {
     setStatus("Offline");
