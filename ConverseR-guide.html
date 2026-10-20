@@ -323,6 +323,35 @@
     font-size: 14px;
     color: #1e3a8a;
   }
+
+  /* Interactive Demo Video Cards */
+  .demo-video-card {
+    margin: 20px 0 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .demo-video-card video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #0f172a;
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-video-caption {
+    padding: 10px 16px;
+    font-size: 13.5px;
+    color: var(--muted);
+    background: var(--surface-alt);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .demo-video-caption strong {
+    color: var(--text);
+  }
 </style>
 </head>
 <body>
@@ -374,6 +403,16 @@
           <p>
             A compact prompt bar designed to be bound to a keyboard shortcut. Highlight code in your script, enter a quick instruction, and replace or insert code directly.
           </p>
+        </div>
+      </div>
+
+      <div class="demo-video-card">
+        <video autoplay loop muted playsinline controls preload="metadata">
+          <source src="assets/intro.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <div class="demo-video-caption">
+          <span>💡 <strong>ConverseR in Action:</strong> An overview of chatting with models, running code, and editing scripts inside RStudio.</span>
         </div>
       </div>
 
@@ -527,6 +566,16 @@ converser_use_openrouter(
       </ul>
       <p>To revert the most recent script edit made by ConverseR, click <strong>Undo</strong> in the Sidebar header or run <code>converser_undo()</code>.</p>
 
+      <div class="demo-video-card">
+        <video autoplay loop muted playsinline controls preload="metadata">
+          <source src="assets/sidebar.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <div class="demo-video-caption">
+          <span>💡 <strong>Sidebar Workflow:</strong> Chatting with ConverseR in the Viewer pane, running code in the console, and modifying your script while keeping your console free.</span>
+        </div>
+      </div>
+
       <div id="context-efficiency">
         <h3>How ConverseR Reads Your Code &amp; Workspace</h3>
         <p>
@@ -571,6 +620,28 @@ converser_use_openrouter(
       <div class="callout" style="margin-top: 14px;">
         <strong>Quick &amp; Focused:</strong> <code>converser_inline()</code> only reads your active code chunk (or the lines immediately around your cursor). This guarantees instant code edits while using minimal API credits.
       </div>
+
+      <div class="card-grid" style="margin-top: 16px;">
+        <div class="demo-video-card" style="margin: 0;">
+          <video autoplay loop muted playsinline controls preload="metadata">
+            <source src="assets/inline-diff.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+          <div class="demo-video-caption">
+            <span>💡 <strong>Preview Difference:</strong> Review red/green diffs in the Viewer before applying.</span>
+          </div>
+        </div>
+
+        <div class="demo-video-card" style="margin: 0;">
+          <video autoplay loop muted playsinline controls preload="metadata">
+            <source src="assets/inline-replace.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+          <div class="demo-video-caption">
+            <span>💡 <strong>Direct Replace:</strong> Instant in-place streaming into your active editor selection.</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 7. PLOTS & ERRORS -->
@@ -584,6 +655,28 @@ converser_use_openrouter(
           <strong>Fix Error:</strong> Click <strong>Fix Error</strong> to send your most recent R error message and backtrace to the assistant. When the corrected code is returned, click <strong>Run in Console</strong> if you are working interactively in the console, or <strong>Replace</strong> / <strong>Insert in Script</strong> if you want to update your script.
         </li>
       </ul>
+
+      <div class="card-grid" style="margin-top: 16px;">
+        <div class="demo-video-card" style="margin: 0;">
+          <video autoplay loop muted playsinline controls preload="metadata">
+            <source src="assets/attach-plot.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+          <div class="demo-video-caption">
+            <span>💡 <strong>Share Plot:</strong> One-click attaching of active graphics for visual feedback.</span>
+          </div>
+        </div>
+
+        <div class="demo-video-card" style="margin: 0;">
+          <video autoplay loop muted playsinline controls preload="metadata">
+            <source src="assets/fix-error.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+          <div class="demo-video-caption">
+            <span>💡 <strong>Fix Error:</strong> Diagnosing console errors and generating instant fixes.</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 8. MODELS & REASONING -->
@@ -621,6 +714,16 @@ converser_use_openrouter(
       <p>
         Run <code>converser_inspect_config()</code> in the R Console at any time to verify the active model, reasoning effort, ZDR settings, and loaded skill files.
       </p>
+
+      <div class="demo-video-card">
+        <video autoplay loop muted playsinline controls preload="metadata">
+          <source src="assets/model-selection.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <div class="demo-video-caption">
+          <span>💡 <strong>Model Selection &amp; Settings:</strong> Exploring Top 20 OpenRouter models, setting reasoning levels, and configuring Zero Data Retention.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 9. SKILL.MD & SKILL.ZIP -->
@@ -692,6 +795,16 @@ converser_use_openrouter(
       <p>
         To activate the bundle, open <strong>Settings &rarr; SKILL.md &amp; ZIP Bundle Loader</strong>, click <strong>Upload .md or .zip</strong>, select your <code>.zip</code> file, and click <strong>Save &amp; Apply</strong>. ConverseR extracts the archive into its persistent configuration directory and includes both <code>SKILL.md</code> and your companion resource files in the system prompt.
       </p>
+
+      <div class="demo-video-card">
+        <video autoplay loop muted playsinline controls preload="metadata">
+          <source src="assets/skills.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <div class="demo-video-caption">
+          <span>💡 <strong>Custom Skills:</strong> Loading and saving persistent coding conventions with SKILL.md templates.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 10. REFERENCE -->
