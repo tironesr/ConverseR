@@ -100,6 +100,47 @@ test_that("sanitize_llm_output strips <thinking> blocks and fixes Quarto chunks"
   expect_true(grepl("```{r}", cleaned_qmd, fixed = TRUE))
 })
 
+test_that("sanitize_llm_output strips all reasoning tags, thought blocks, and conversational preambles", {
+  # 1. <thought> and <reasoning> tags
+  raw_thought <- "<thought>\nLet's calculate summary stats.\n</thought>\nres <- summary(df)"
+  expect_equal(trimws(sanitize_llm_output(raw_thought, ext = "r")), "res <- summary(df)")
+
+  raw_reasoning <- "<reasoning>\nStep 1: fit model.\n</reasoning>\nfit <- lm(y ~ x, data = d)"
+  expect_equal(trimws(sanitize_llm_output(raw_reasoning, ext = "r")), "fit <- lm(y ~ x, data = d)")
+
+  # 2. Markdown fenced reasoning blocks
+  raw_fence <- "```thought\nAnalyzing the columns\n```\ndf |> select(a, b)"
+  expect_equal(trimws(sanitize_llm_output(raw_fence, ext = "r")), "df |> select(a, b)")
+
+  # 3. Unclosed streaming reasoning tags (suppressed mid-stream)
+  unclosed_stream <- "<thought>\nThinking midway through generation..."
+  expect_equal(sanitize_llm_output(unclosed_stream, ext = "r"), "")
+
+  # 4. Markdown thought headings & conversational preambles with code fences in pure code mode
+  raw_preamble <- "Here is the updated code:\n\n```r\nx <- 1:10\ny <- x * 2\n```\n\nHope that helps!"
+  expect_equal(trimws(sanitize_llm_output(raw_preamble, ext = "r", strip_fences = TRUE)), "x <- 1:10\ny <- x * 2")
+
+  # 5. Markdown thought process heading without fences
+  raw_md_heading <- "**Thinking Process:**\n1. Use dplyr mutate.\n\ndf |> mutate(z = x + y)"
+  expect_equal(trimws(sanitize_llm_output(raw_md_heading, ext = "r", strip_fences = TRUE)), "df |> mutate(z = x + y)")
+
+  # 6. Unclosed streaming code block extracts code after opening fence
+  raw_stream_fence <- "Sure! Here is the code:\n```r\np + geom_smooth()"
+  expect_equal(trimws(sanitize_llm_output(raw_stream_fence, ext = "r", strip_fences = TRUE)), "p + geom_smooth()")
+})
+
+test_that("converser_use_openrouter passes exclude = TRUE for reasoning suppression", {
+  opt1 <- converser_use_openrouter(api_key = "test_key", model = "deepseek/deepseek-v4.1-flash", reasoning_effort = "low", persist = FALSE)
+  prov1 <- opt1$get_provider()
+  expect_equal(prov1@extra_args$reasoning$effort, "low")
+  expect_true(isTRUE(prov1@extra_args$reasoning$exclude))
+
+  opt2 <- converser_use_openrouter(api_key = "test_key", model = "deepseek/deepseek-v4.1-flash", reasoning_effort = "none", persist = FALSE)
+  prov2 <- opt2$get_provider()
+  expect_equal(prov2@extra_args$reasoning$effort, "none")
+  expect_true(isTRUE(prov2@extra_args$reasoning$exclude))
+})
+
 test_that("extract_code_from_markdown and render_code_diff_html work accurately", {
   md <- "Here is the updated code:\n\n```r\nx <- 1:10\ny <- x * 2\n```\n\nHope that helps!"
   extracted <- extract_code_from_markdown(md)

@@ -379,9 +379,9 @@ converser_use_openrouter <- function(
 
   if (!is.null(reasoning_effort) && nzchar(trimws(reasoning_effort)) && !identical(reasoning_effort, "default")) {
     if (identical(reasoning_effort, "none")) {
-      api_args$reasoning <- list(exclude = TRUE)
+      api_args$reasoning <- list(effort = "none", exclude = TRUE)
     } else {
-      api_args$reasoning <- list(effort = trimws(reasoning_effort))
+      api_args$reasoning <- list(effort = trimws(reasoning_effort), exclude = TRUE)
     }
   }
 

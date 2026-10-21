@@ -77,33 +77,44 @@ construct_system_prompt <- function(
   }
 
   if (identical(mode, "inline")) {
+    reasoning_constraint <- paste0(
+      "CRITICAL REASONING & OUTPUT RULES:\n",
+      "- Do NOT output any internal thoughts, reasoning process, chain-of-thought, or analysis in your response.\n",
+      "- Absolutely NO thinking or reasoning tags in your output: no <think>, no <thinking>, no <thought>, no <reasoning>, no <reflection>, and no <scratchpad>.\n",
+      "- Do NOT include conversational commentary, preambles, or sign-offs (no 'Here is the code:', no 'Hope this helps').\n",
+      "- Output ONLY the pure replacement or insertion text ready for the editor document buffer. Any non-code text corrupts the user's R script buffer.\n\n"
+    )
+
     format_rules <- if (identical(ext, "r")) {
       paste0(
-        "CRITICAL OUTPUT FORMAT: You are streaming directly into an `.R` script buffer. ",
+        reasoning_constraint,
+        "You are streaming directly into an `.R` script buffer. ",
         "Respond ONLY with valid, executable R code. Do NOT include markdown code fences ",
-        "(no ```r or ```), do NOT include conversational exposition, and do NOT include ",
-        "<thinking> tags in your final output. Any necessary brief notes must be R comments (#)."
+        "(no ```r or ```), do NOT include conversational exposition. ",
+        "Any necessary brief notes must be R comments (#)."
       )
     } else if (ext %in% c("qmd", "rmd")) {
       if (has_selection) {
         paste0(
-          "CRITICAL OUTPUT FORMAT: You are streaming replacement code directly into a Quarto/RMarkdown (.",
+          reasoning_constraint,
+          "You are streaming replacement code directly into a Quarto/RMarkdown (.",
           ext, ") document where the user has highlighted code. Provide ONLY pure, executable R code ",
           "without chunk opening delimiters (no ```{r} or ```{r label}), no closing delimiters (no ```), ",
-          "no surrounding markdown fences, and no conversational wrapper."
+          "no surrounding markdown fences, and no conversational or reasoning wrapper."
         )
       } else {
         paste0(
-          "CRITICAL OUTPUT FORMAT: You are streaming directly into a Quarto/RMarkdown (.",
+          reasoning_constraint,
+          "You are streaming directly into a Quarto/RMarkdown (.",
           ext, ") document. When generating executable R code blocks outside an existing ",
           "chunk, use standard executable chunk syntax ` ```{r} ` (with curly braces), ",
-          "NOT ` ```r `. Provide only the requested content with no conversational wrapper."
+          "NOT ` ```r `. Provide only the requested content with no conversational or reasoning wrapper."
         )
       }
     } else {
       paste0(
-        "CRITICAL OUTPUT FORMAT: Provide only the requested code or text with no ",
-        "conversational exposition and no surrounding markdown fences unless explicitly asked."
+        reasoning_constraint,
+        "Provide only the requested code or text with no conversational exposition and no surrounding markdown fences unless explicitly asked."
       )
     }
 
@@ -308,20 +319,47 @@ sanitize_llm_output <- function(text, ext = "r", strip_fences = (identical(ext, 
   }
   out <- paste0(text, collapse = "")
 
-  # 1. Strip complete <thinking>...</thinking> or <think>...</think> blocks (dotall)
-  out <- gsub("(?s)<think(?:ing)?>.*?</think(?:ing)?>\\s*", "", out, perl = TRUE)
+  # 1. Strip complete XML-style reasoning / thinking blocks (dotall, case-insensitive)
+  # Matches: <think>...</think>, <thinking>...</thinking>, <thought>...</thought>,
+  # <thoughts>...</thoughts>, <reasoning>...</reasoning>, <reflection>...</reflection>,
+  # <scratchpad>...</scratchpad>, <antThinking>...</antThinking>
+  reasoning_tag_pattern <- "(?si)<(think(?:ing)?|thoughts?|reason(?:ing)?|reflection|scratchpad|antThinking)(?:\\s[^>]*)?>.*?</\\1>\\s*"
+  out <- gsub(reasoning_tag_pattern, "", out, perl = TRUE)
 
-  # 2. If streaming is mid-way inside an unclosed <thinking> block, hide the partial thinking text
-  if (grepl("<think(?:ing)?>", out, perl = TRUE) && !grepl("</think(?:ing)?>", out, perl = TRUE)) {
-    out <- sub("(?s)<think(?:ing)?>.*$", "", out, perl = TRUE)
+  # 2. Strip complete markdown-fenced reasoning blocks: ```thought ... ```
+  out <- gsub("(?si)```+(?:thought|thinking|reasoning|reflection|scratchpad)\\b.*?```+\\s*", "", out, perl = TRUE)
+
+  # 3. If streaming is mid-way inside an unclosed reasoning block, suppress the partial thinking text
+  unclosed_tag_pattern <- "(?si)<(think(?:ing)?|thoughts?|reason(?:ing)?|reflection|scratchpad|antThinking)(?:\\s[^>]*)?>.*$"
+  if (grepl(unclosed_tag_pattern, out, perl = TRUE)) {
+    out <- sub(unclosed_tag_pattern, "", out, perl = TRUE)
+  }
+  unclosed_fence_pattern <- "(?si)```+(?:thought|thinking|reasoning|reflection|scratchpad)\\b.*$"
+  if (grepl(unclosed_fence_pattern, out, perl = TRUE)) {
+    out <- sub(unclosed_fence_pattern, "", out, perl = TRUE)
   }
 
-  # 3. Strip five-backtick delimiter fences if the model echoed them
+  # 4. Strip five-backtick delimiter fences if the model echoed them
   out <- gsub("^\\s*`````[a-zA-Z0-9_{}]*\\n?", "", out)
   out <- gsub("\\n?`````\\s*$", "", out)
 
-  # 4. In .R files (or when strip_fences = TRUE), strip outer triple-backtick code fences / chunk headers
+  # 5. In pure code mode (e.g. .R files or replacement inside an existing chunk), strip reasoning headers & preambles
   if (isTRUE(strip_fences)) {
+    # If the output contains markdown code fences, extract the pure code from inside the fences
+    if (grepl("```", out, fixed = TRUE)) {
+      extracted <- extract_code_from_markdown(out)
+      if (nzchar(trimws(extracted))) {
+        out <- extracted
+      }
+    }
+    # Strip markdown thought headers like **Thinking Process:**, ## Reasoning, Thought:, etc.
+    pat_md_thought <- "(?si)^\\s*(?:\\*\\*|#{1,4}|_)?\\s*(?:thought(?:\\s*process)?|thinking(?:\\s*process)?|reasoning(?:\\s*process)?)\\s*(?:\\*\\*|#{1,4}|_)?[:\\s].*?(?=\\n\\n|\\n(?=[a-zA-Z0-9_.]+\\s*(?:<-|=|\\|>|\\$|%|library|#))|$)"
+    out <- sub(pat_md_thought, "", out, perl = TRUE)
+
+    # Strip conversational lead-ins like "Here is the code:"
+    pat_leadin <- "(?i)^\\s*(?:(?:sure|certainly|okay|ok),?\\s*)?(?:here(?:['’]s| is) (?:the )?(?:updated |corrected |modified |replacement )?(?:code|r code|script):?)\\s*\n?"
+    out <- sub(pat_leadin, "", out, perl = TRUE)
+
     out <- strip_chunk_fences(out)
   } else if (ext %in% c("qmd", "rmd")) {
     out <- gsub("(?m)^(\\s*)```r\\s*$", "\\1```{r}", out, perl = TRUE)
@@ -346,6 +384,11 @@ extract_code_from_markdown <- function(markdown_text) {
   matches <- regmatches(cleaned, gregexpr(pattern, cleaned, perl = TRUE))[[1]]
 
   if (length(matches) == 0) {
+    # Check if mid-stream with an unclosed opening fence
+    open_fence_pattern <- "(?s)^.*?```(?:\\{r[^}]*\\}|[a-zA-Z0-9_-]*)\\s*\r?\n"
+    if (grepl(open_fence_pattern, cleaned, perl = TRUE)) {
+      return(sub(open_fence_pattern, "", cleaned, perl = TRUE))
+    }
     return(trimws(strip_chunk_fences(cleaned)))
   }
 
