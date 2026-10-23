@@ -332,14 +332,32 @@ get_safe_editor_context <- function() {
 has_active_selection <- function() {
   ctx <- get_safe_editor_context()
   if (is.null(ctx)) return(FALSE)
-  sel_text <- tryCatch(rstudioapi::primary_selection(ctx)$text %||% "", error = function(e) "")
+  sel_text <- tryCatch(
+    {
+      if (!is.null(ctx$selection) && length(ctx$selection) > 0L) {
+        ctx$selection[[1]]$text %||% ""
+      } else {
+        rstudioapi::primary_selection(ctx)$text %||% ""
+      }
+    },
+    error = function(e) ""
+  )
   nzchar(sel_text)
 }
 
 detect_active_model_selection <- function() {
   ctx <- get_safe_editor_context()
   if (is.null(ctx)) return(list(has_selection = FALSE, has_model = FALSE, model_fn = NULL))
-  sel_text <- tryCatch(rstudioapi::primary_selection(ctx)$text %||% "", error = function(e) "")
+  sel_text <- tryCatch(
+    {
+      if (!is.null(ctx$selection) && length(ctx$selection) > 0L) {
+        ctx$selection[[1]]$text %||% ""
+      } else {
+        rstudioapi::primary_selection(ctx)$text %||% ""
+      }
+    },
+    error = function(e) ""
+  )
   if (!nzchar(sel_text)) {
     return(list(has_selection = FALSE, has_model = FALSE, model_fn = NULL))
   }
@@ -664,7 +682,7 @@ api_post_chat <- function(body) {
     return(list(ok = FALSE, error = "No OpenRouter API key configured yet. Click Settings in the top bar to enter your key and save your defaults."))
   }
 
-  has_sel <- !is.null(ctx) && nzchar(rstudioapi::primary_selection(ctx)$text %||% "")
+  has_sel <- has_active_selection()
   chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar", has_selection = has_sel, is_consult = is_consult))
   prune_chat_turn_payloads(chat)
   converser_env[["active_chat"]] <- chat
@@ -810,7 +828,9 @@ api_post_chat <- function(body) {
 
 api_post_diff <- function(body) {
   ctx <- get_safe_editor_context()
-  sel_text <- if (!is.null(ctx)) (rstudioapi::primary_selection(ctx)$text %||% "") else ""
+  sel_text <- if (!is.null(ctx)) {
+    tryCatch(if (!is.null(ctx$selection) && length(ctx$selection) > 0L) ctx$selection[[1]]$text else rstudioapi::primary_selection(ctx)$text %||% "", error = function(e) "")
+  } else ""
   proposed <- body$code %||% ""
 
   # If user's selection does not explicitly contain chunk headers, strip any outer fences from proposed
@@ -841,7 +861,10 @@ api_post_apply <- function(body) {
     return(list(ok = FALSE, error = "Please click inside an R script in the Source Editor first (or click 'Run in Console')."))
   }
 
-  sel <- rstudioapi::primary_selection(ctx)
+  sel <- tryCatch(
+    if (!is.null(ctx$selection) && length(ctx$selection) > 0L) ctx$selection[[1]] else rstudioapi::primary_selection(ctx),
+    error = function(e) list(text = "", range = list(start = c(row = 1L, column = 1L), end = c(row = 1L, column = 1L)))
+  )
   sel_text <- sel$text %||% ""
   if (identical(mode, "replace") && !nzchar(sel_text)) {
     return(list(ok = FALSE, error = "Nothing is highlighted in the script to replace. Highlight code first, click 'Run in Console', or click 'Insert'."))
@@ -2050,9 +2073,9 @@ function quickAction(type) {
   if (type === "error") {
     sendPromptInternal("Diagnose my last R error and provide the corrected R code.", true, false);
   } else if (type === "consult") {
-    const fnName = activeModelFn ? `\`${activeModelFn}()\`` : "the highlighted model";
+    const fnName = activeModelFn ? (activeModelFn + "()") : "the highlighted model";
     sendPromptInternal(
-      `I have highlighted ${fnName}. Please evaluate this model specification in the context of my entire script and data, walk through the key statistical tradeoffs and alternatives in clear non-jargony language, and suggest recommended improvements or diagnostic checks.`,
+      "I have highlighted " + fnName + ". Please evaluate this model specification in the context of my entire script and data, walk through the key statistical tradeoffs and alternatives in clear non-jargony language, and suggest recommended improvements or diagnostic checks.",
       false,
       false,
       true,

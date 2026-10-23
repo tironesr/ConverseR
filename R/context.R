@@ -235,7 +235,10 @@ fetch_code_context <- function(
   }
 
   contents <- context$contents %||% character(0)
-  primary_sel <- rstudioapi::primary_selection(context)
+  primary_sel <- tryCatch(
+    if (!is.null(context$selection) && length(context$selection) > 0L) context$selection[[1]] else rstudioapi::primary_selection(context),
+    error = function(e) list(text = "", range = list(start = c(row = 1L, column = 1L), end = c(row = 1L, column = 1L)))
+  )
   selection_text <- primary_sel[["text"]] %||% ""
 
   start_row <- primary_sel$range$start[["row"]] %||% 1L
