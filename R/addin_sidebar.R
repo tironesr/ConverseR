@@ -469,6 +469,11 @@ api_get_state <- function() {
 
   model_short <- sub("^[^/]+/", "", model_name)
   msgs <- converser_env[["chat_history_ui"]] %||% list()
+  # Clear any legacy auto_open_diff flags on historical turns so future turns never re-trigger diff auto-opening
+  msgs <- lapply(msgs, function(m) {
+    m$auto_open_diff <- NULL
+    m
+  })
 
   list(
     ok = TRUE,
@@ -664,6 +669,11 @@ api_post_chat <- function(body) {
   }
 
   msgs <- converser_env[["chat_history_ui"]] %||% list()
+  # Clear any legacy auto_open_diff flags on historical turns so future turns never re-trigger diff auto-opening
+  msgs <- lapply(msgs, function(m) {
+    m$auto_open_diff <- NULL
+    m
+  })
   user_html <- commonmark::markdown_html(prompt_str, extensions = TRUE)
   if (!is.null(plot_data_uri)) {
     user_html <- paste0(
@@ -1389,15 +1399,21 @@ function renderMessages(messages, scrollBehavior = "smooth") {
     return;
   }
 
-  let autoOpenLastDiff = false;
+  // Only the VERY LAST message in the conversation can EVER auto-open a diff drawer,
+  // and only if explicitly requested by converser_inline() with Preview Difference first.
+  const lastMsg = (messages && messages.length > 0) ? messages[messages.length - 1] : null;
+  const shouldAutoOpenLastDiff = !!(lastMsg && lastMsg.role === "assistant" && lastMsg.auto_open_diff);
+  if (lastMsg && lastMsg.auto_open_diff) {
+    lastMsg.auto_open_diff = false; // consume immediately
+  }
+
   box.innerHTML = messages.map((m) => {
-    if (m.auto_open_diff) autoOpenLastDiff = true;
     const cls = m.role === "user" ? "rc-msg rc-msg-user" : "rc-msg rc-msg-assistant";
     const prefAttr = m.preferred_mode ? ` data-preferred-mode="${m.preferred_mode}"` : "";
     return `<div class="${cls}"${prefAttr}>${m.html}</div>`;
   }).join("");
 
-  enhanceCodeBlocks(autoOpenLastDiff);
+  enhanceCodeBlocks(shouldAutoOpenLastDiff);
   updateReplaceButtonsState(hasEditorSelection);
 
   // Position viewport at the TOP of the new assistant message rather than pulling down to the bottom
@@ -1423,7 +1439,6 @@ function renderMessages(messages, scrollBehavior = "smooth") {
 
 function enhanceCodeBlocks(autoOpenLastDiff = false) {
   const pres = Array.from(document.querySelectorAll(".rc-msg-assistant pre"));
-  let diffAutoOpened = false;
   pres.forEach((pre, idx) => {
     if (pre.parentElement && pre.parentElement.classList.contains("rc-code-wrapper")) return;
     const codeEl = pre.querySelector("code");
@@ -1578,13 +1593,19 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
         await applyCode(mode, cleanCode);
       });
     });
-
-    // If triggered from converser_inline() with "Preview Difference first", auto-open the diff drawer on the valid code block!
-    if (autoOpenLastDiff && !diffAutoOpened && diffBtn) {
-      diffAutoOpened = true;
-      setTimeout(() => diffBtn.click(), 80);
-    }
   });
+
+  // If explicitly requested by the newest message from converser_inline(preview_diff = TRUE),
+  // auto-open ONLY the diff drawer inside the newest assistant message.
+  if (autoOpenLastDiff) {
+    const lastMsgEl = document.querySelector(".rc-msg-assistant:last-child");
+    if (lastMsgEl) {
+      const diffBtn = lastMsgEl.querySelector(".rc-code-btn-diff");
+      if (diffBtn) {
+        setTimeout(() => diffBtn.click(), 80);
+      }
+    }
+  }
 }
 
 async function runInConsole(code, btnEl) {

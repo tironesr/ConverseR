@@ -266,6 +266,11 @@ converser_inline_gadget <- function(has_selection) {
 open_nonblocking_diff_review <- function(original, proposed, interface = "replace", prompt = "") {
   # Append a special diff review card into the non-blocking sidebar and open it!
   msgs <- converser_env[["chat_history_ui"]] %||% list()
+  # Clear any legacy auto_open_diff flags on previous turns
+  msgs <- lapply(msgs, function(m) {
+    m$auto_open_diff <- NULL
+    m
+  })
 
   mode_label <- switch(
     interface,

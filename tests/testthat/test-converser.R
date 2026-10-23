@@ -270,6 +270,8 @@ test_that("non-blocking httpuv sidebar server serves 200 OK HTML, Top 20 OpenRou
   expect_true(grepl("Run in Console", res_html$body, fixed = TRUE))
   expect_true(grepl("targetRect.top - boxRect.top + box.scrollTop", res_html$body, fixed = TRUE))
   expect_false(grepl("renderMessages[^{]*\\{[^}]*box\\.scrollTop = box\\.scrollHeight;", res_html$body))
+  expect_true(grepl("shouldAutoOpenLastDiff", res_html$body, fixed = TRUE))
+  expect_true(grepl("rc-msg-assistant:last-child", res_html$body, fixed = TRUE))
 
   sys_prompt <- ConverseR:::construct_system_prompt(context = NULL, mode = "sidebar")
   expect_true(grepl("SINGLE ```yaml ... ``` code chunk", sys_prompt, fixed = TRUE))
@@ -281,6 +283,38 @@ test_that("non-blocking httpuv sidebar server serves 200 OK HTML, Top 20 OpenRou
   expect_equal(res_state$status, 200L)
   parsed <- jsonlite::fromJSON(res_state$body)
   expect_true(isTRUE(parsed$ok))
+})
+
+test_that("open_nonblocking_diff_review and api_post_chat isolate auto_open_diff to only newest preview diff turn", {
+  # 1. Simulate an inline preview diff
+  ConverseR:::open_nonblocking_diff_review(
+    original = "x <- 1",
+    proposed = "x <- 2",
+    interface = "replace",
+    prompt = "Change 1 to 2"
+  )
+  ui_history <- ConverseR:::converser_env[["chat_history_ui"]]
+  last_turn <- ui_history[[length(ui_history)]]
+  expect_true(isTRUE(last_turn$auto_open_diff))
+
+  # 2. Simulate subsequent preview diff clears the older turn's auto_open_diff
+  ConverseR:::open_nonblocking_diff_review(
+    original = "y <- 10",
+    proposed = "y <- 20",
+    interface = "replace",
+    prompt = "Change 10 to 20"
+  )
+  ui_history2 <- ConverseR:::converser_env[["chat_history_ui"]]
+  expect_null(ui_history2[[2]]$auto_open_diff)
+  expect_true(isTRUE(ui_history2[[length(ui_history2)]]$auto_open_diff))
+
+  # 3. Simulate asking a question in sidebar via api_post_chat clears all legacy auto_open_diff flags
+  res_chat <- ConverseR:::api_post_chat(list(prompt = "How does this code work?"))
+  # Note: chat response will succeed or return error message, but history is updated
+  msgs <- ConverseR:::converser_env[["chat_history_ui"]]
+  # All older turns should have auto_open_diff NULL
+  prior_flags <- unlist(lapply(msgs[seq_len(length(msgs) - 1L)], function(m) m$auto_open_diff))
+  expect_length(prior_flags, 0L)
 })
 
 test_that("expanded whole-document context (10,000 lines) and .GlobalEnv manifest/objects use session hash caching across turns", {
