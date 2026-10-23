@@ -217,7 +217,7 @@ construct_turn <- function(
   }
 
   err_ctx <- if (isTRUE(include_error)) {
-    capture_error_context()
+    capture_error_context(context = context)
   } else {
     character(0)
   }
@@ -225,6 +225,11 @@ construct_turn <- function(
   effective_prompt <- if (isTRUE(is_consult)) {
     paste0(
       "[Model Consultation Request]: The user has highlighted a statistical model call and requested an interactive statistical consultation. Examine the model call, full script, and .GlobalEnv data objects, then provide tailored, non-jargony guidance.\n\n",
+      user_prompt
+    )
+  } else if (isTRUE(include_error)) {
+    paste0(
+      "[Error Diagnosis Request]: The user encountered an R error and requested a diagnosis and fix. Inspect the exact line/block of code that led to the error, the error message, the surrounding script context, and .GlobalEnv objects. Explain the cause concisely and provide the corrected code in a ready-to-run ```r ... ``` code block.\n\n",
       user_prompt
     )
   } else {

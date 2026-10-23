@@ -844,3 +844,125 @@ test_that("Model Consultation: system prompt, turn payload, and sidebar UI wirin
   expect_true("model_fn" %in% names(parsed_sel))
 })
 
+test_that("Fix Error accurately identifies failing line of code, line number, and error context", {
+  # 1. find_expression_ending_at handles single-line and multiline statements
+  script_lines <- c(
+    "x <- 10",
+    "fit <- lm(",
+    "  mpg ~ cyl,",
+    "  data = mtcars",
+    ")",
+    "summary(fit)",
+    "bad_syntax <- lm(mpg ~"
+  )
+  
+  # Single line ending at row 1
+  s1 <- ConverseR:::find_expression_ending_at(script_lines, 1)
+  expect_equal(s1$start, 1)
+  expect_equal(s1$end, 1)
+  expect_equal(s1$code, "x <- 10")
+
+  # Multiline ending at row 5 (cursor at row 6)
+  s_multi <- ConverseR:::find_expression_ending_at(script_lines, 5)
+  expect_equal(s_multi$start, 2)
+  expect_equal(s_multi$end, 5)
+  expect_true(grepl("fit <- lm", s_multi$code, fixed = TRUE))
+
+  # Syntax error fallback
+  s_err <- ConverseR:::find_expression_ending_at(script_lines, 7)
+  expect_equal(s_err$start, 7)
+  expect_equal(s_err$end, 7)
+  expect_equal(s_err$code, "bad_syntax <- lm(mpg ~")
+
+  # 2. extract_call_from_errmsg
+  call_single <- ConverseR:::extract_call_from_errmsg("Error in lm(mpg ~ bad, data = mtcars) : object 'bad' not found")
+  expect_equal(call_single, "lm(mpg ~ bad, data = mtcars)")
+
+  call_multi <- ConverseR:::extract_call_from_errmsg("Error in lm(mpg ~ bad,\n    data = mtcars) :\n  object 'bad' not found")
+  expect_true(grepl("lm(mpg ~ bad", call_multi, fixed = TRUE))
+
+  call_none <- ConverseR:::extract_call_from_errmsg("Error: object 'x' not found")
+  expect_null(call_none)
+
+  # 3. extract_failing_code with active highlighted selection (Tier 1)
+  ctx_sel <- structure(
+    list(
+      path = "analysis.R",
+      contents = script_lines,
+      selection = list(list(
+        text = "fit <- lm(mpg ~ cyl, data = mtcars)",
+        range = list(start = list(row = 2, column = 1), end = list(row = 2, column = 35))
+      ))
+    ),
+    class = "document_context"
+  )
+  res_sel <- ConverseR:::extract_failing_code(ctx_sel, "Error in eval(...) : bad variable")
+  expect_equal(res_sel$code, "fit <- lm(mpg ~ cyl, data = mtcars)")
+  expect_true(grepl("Highlighted Selection", res_sel$source))
+  expect_equal(res_sel$line_start, 2)
+
+  # 4. extract_failing_code with Ctrl+Enter cursor advance (cursor on row 3, failed on row 2)
+  ctx_adv <- structure(
+    list(
+      path = "analysis.R",
+      contents = c("data <- mtcars", "fit <- lm(mpg ~ nonexistent, data = data)", "summary(fit)"),
+      selection = list(list(
+        text = "",
+        range = list(start = list(row = 3, column = 1), end = list(row = 3, column = 1))
+      ))
+    ),
+    class = "document_context"
+  )
+  res_adv <- ConverseR:::extract_failing_code(ctx_adv, "Error in eval(predvars, data, env) : object 'nonexistent' not found")
+  expect_equal(res_adv$code, "fit <- lm(mpg ~ nonexistent, data = data)")
+  expect_equal(res_adv$line_start, 2)
+  expect_equal(res_adv$source, "Line 2 of analysis.R")
+
+  # 5. extract_failing_code with multiline piped block ending at row 4, cursor on row 5
+  ctx_pipe <- structure(
+    list(
+      path = "clean.R",
+      contents = c(
+        "mtcars |>",
+        "  filter(cyl == 4) |>",
+        "  mutate(bad = missing_var * 2) |>",
+        "  summarise(m = mean(bad))",
+        "print('done')"
+      ),
+      selection = list(list(
+        text = "",
+        range = list(start = list(row = 5, column = 1), end = list(row = 5, column = 1))
+      ))
+    ),
+    class = "document_context"
+  )
+  res_pipe <- ConverseR:::extract_failing_code(ctx_pipe, "Error in mutate() : object 'missing_var' not found")
+  expect_equal(res_pipe$line_start, 1)
+  expect_equal(res_pipe$line_end, 4)
+  expect_equal(res_pipe$source, "Lines 1-4 of clean.R")
+  expect_true(grepl("mutate(bad = missing_var * 2)", res_pipe$code, fixed = TRUE))
+
+  # 6. extract_failing_code from console / base R error message
+  res_console <- ConverseR:::extract_failing_code(NULL, "Error in read.csv('missing_file.csv') : cannot open the connection")
+  expect_equal(res_console$code, "read.csv('missing_file.csv')")
+  expect_equal(res_console$source, "Failed Call")
+
+  # 7. capture_error_context formats code block and line numbers
+  try(stop("Intentional test error"), silent = TRUE)
+  err_ctx <- ConverseR:::capture_error_context(context = ctx_adv)
+  expect_true(grepl("Code line/statement that led to the error", err_ctx, fixed = TRUE))
+  expect_true(grepl("Line 2 of analysis.R", err_ctx, fixed = TRUE))
+  expect_true(grepl("fit <- lm(mpg ~ nonexistent, data = data)", err_ctx, fixed = TRUE))
+
+  # 8. construct_turn with include_error = TRUE includes failing code and prompt framing
+  turn_err <- ConverseR:::construct_turn(
+    user_prompt = "Diagnose my error",
+    context = ctx_adv,
+    include_error = TRUE
+  )
+  expect_true(grepl("\\[Error Diagnosis Request\\]", turn_err))
+  expect_true(grepl("Line 2 of analysis.R", turn_err, fixed = TRUE))
+  expect_true(grepl("fit <- lm(mpg ~ nonexistent, data = data)", turn_err, fixed = TRUE))
+})
+
+

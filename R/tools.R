@@ -198,12 +198,203 @@ tool_search_help <- function(topic, pkg = NULL) {
 }
 
 tool_last_error <- function() {
-  capture_error_context()
+  capture_error_context(context = get_safe_editor_context())
 }
 
-#' Capture the most recent R error message and rlang backtrace
+find_expression_ending_at <- function(contents, end_line, max_lines = 35L) {
+  if (is.null(contents) || length(contents) == 0L || is.null(end_line) || is.na(end_line)) {
+    return(NULL)
+  }
+  end_line <- min(as.integer(end_line), length(contents))
+  if (end_line < 1L) return(NULL)
+
+  # Skip trailing blank lines or comments if end_line itself is blank/comment
+  while (end_line >= 1L && (!nzchar(trimws(contents[end_line])) || grepl("^\\s*#", contents[end_line]))) {
+    end_line <- end_line - 1L
+  }
+  if (end_line < 1L) return(NULL)
+
+  min_line <- max(1L, end_line - max_lines + 1L)
+  best_stmt <- NULL
+
+  for (start_line in seq(end_line, min_line, by = -1L)) {
+    raw_sub <- paste(contents[start_line:end_line], collapse = "\n")
+    p <- tryCatch(parse(text = raw_sub, keep.source = FALSE), error = function(e) NULL)
+    if (!is.null(p) && length(p) == 1L) {
+      best_stmt <- list(
+        start = start_line,
+        end = end_line,
+        code = paste(contents[start_line:end_line], collapse = "\n")
+      )
+    } else if (!is.null(best_stmt) && !is.null(p) && length(p) > 1L) {
+      break
+    }
+  }
+
+  if (is.null(best_stmt)) {
+    best_stmt <- list(
+      start = end_line,
+      end = end_line,
+      code = contents[end_line]
+    )
+  }
+  best_stmt
+}
+
+extract_call_from_errmsg <- function(err_msg) {
+  if (is.null(err_msg) || !nzchar(err_msg)) return(NULL)
+  m <- regexec("(?s)^\\s*Error in (.*?)\\s*:\\s*(.*)$", err_msg, perl = TRUE)
+  matches <- regmatches(err_msg, m)[[1]]
+  if (length(matches) >= 2L && nzchar(trimws(matches[2]))) {
+    return(trimws(matches[2]))
+  }
+  NULL
+}
+
+#' Extract the code line or statement that caused the most recent error
+#' @param context Editor context from RStudio.
+#' @param err_msg Error message string from `geterrmessage()`.
+#' @param rlang_err Optional error object from `rlang::last_error()`.
 #' @keywords internal
-capture_error_context <- function() {
+extract_failing_code <- function(context = NULL, err_msg = "", rlang_err = NULL) {
+  err_msg <- trimws(err_msg %||% "")
+  err_call <- extract_call_from_errmsg(err_msg)
+
+  rlang_call <- NULL
+  if (!is.null(rlang_err)) {
+    rlang_call <- tryCatch({
+      c_obj <- rlang_err$call %||% rlang_err$trace$call
+      if (!is.null(c_obj)) paste(deparse(c_obj), collapse = "\n") else NULL
+    }, error = function(e) NULL)
+  }
+
+  # Tier 1: User has an active selection in the editor
+  if (!is.null(context) && !is.null(context$selection) && length(context$selection) > 0L) {
+    sel_text <- trimws(context$selection[[1]]$text %||% "")
+    if (nzchar(sel_text)) {
+      fname <- if (!is.null(context$path) && nzchar(context$path)) basename(context$path) else "script"
+      r_start <- tryCatch(as.integer(context$selection[[1]]$range$start[["row"]]), error = function(e) NA_integer_)
+      r_end <- tryCatch(as.integer(context$selection[[1]]$range$end[["row"]]), error = function(e) NA_integer_)
+
+      source_desc <- if (!is.na(r_start) && !is.na(r_end) && r_start == r_end) {
+        sprintf("Line %d of %s (Highlighted Selection)", r_start, fname)
+      } else if (!is.na(r_start) && !is.na(r_end)) {
+        sprintf("Lines %d-%d of %s (Highlighted Selection)", r_start, r_end, fname)
+      } else {
+        sprintf("%s (Highlighted Selection)", fname)
+      }
+      return(list(code = sel_text, source = source_desc, line_start = r_start, line_end = r_end))
+    }
+  }
+
+  # Tier 2: Editor script around cursor position
+  if (!is.null(context) && !is.null(context$contents) && length(context$contents) > 0L) {
+    contents <- context$contents
+    fname <- if (!is.null(context$path) && nzchar(context$path)) basename(context$path) else "script"
+    cursor_row <- tryCatch(as.integer(context$selection[[1]]$range$start[["row"]]), error = function(e) NA_integer_)
+
+    if (!is.na(cursor_row) && cursor_row >= 1L) {
+      cand_a <- if (cursor_row > 1L) find_expression_ending_at(contents, cursor_row - 1L) else NULL
+      cand_b <- find_expression_ending_at(contents, cursor_row)
+
+      matches_err <- function(cand) {
+        if (is.null(cand) || !nzchar(cand$code)) return(FALSE)
+        if (!is.null(err_call)) {
+          if (grepl(err_call, cand$code, fixed = TRUE)) return(TRUE)
+          fn_name <- sub("\\(.*$", "", err_call)
+          if (nzchar(fn_name)) {
+            if (grepl("^[a-zA-Z0-9_.]+$", fn_name)) {
+              if (tryCatch(grepl(paste0("\\b", fn_name, "\\b"), cand$code), error = function(e) FALSE)) return(TRUE)
+            }
+            if (grepl(fn_name, cand$code, fixed = TRUE)) return(TRUE)
+          }
+        }
+        if (!is.null(rlang_call)) {
+          if (grepl(rlang_call, cand$code, fixed = TRUE)) return(TRUE)
+          fn_name <- sub("\\(.*$", "", rlang_call)
+          if (nzchar(fn_name)) {
+            if (grepl("^[a-zA-Z0-9_.]+$", fn_name)) {
+              if (tryCatch(grepl(paste0("\\b", fn_name, "\\b"), cand$code), error = function(e) FALSE)) return(TRUE)
+            }
+            if (grepl(fn_name, cand$code, fixed = TRUE)) return(TRUE)
+          }
+        }
+        if (nzchar(err_msg)) {
+          quoted_tokens <- regmatches(err_msg, gregexpr("['\"][a-zA-Z0-9_.]+['\"]", err_msg))[[1]]
+          if (length(quoted_tokens) > 0L) {
+            clean_tokens <- gsub("['\"]", "", quoted_tokens)
+            clean_tokens <- clean_tokens[nchar(clean_tokens) > 1L]
+            for (tok in clean_tokens) {
+              if (grepl(paste0("\\b", tok, "\\b"), cand$code)) return(TRUE)
+            }
+          }
+        }
+        FALSE
+      }
+
+      chosen <- NULL
+      if (!is.null(cand_a) && matches_err(cand_a)) {
+        chosen <- cand_a
+      } else if (!is.null(cand_b) && matches_err(cand_b)) {
+        chosen <- cand_b
+      } else if (!is.null(cand_a) && nzchar(trimws(cand_a$code))) {
+        # Default to cursor_row - 1 because Ctrl+Enter advances cursor in RStudio
+        chosen <- cand_a
+      } else if (!is.null(cand_b) && nzchar(trimws(cand_b$code))) {
+        chosen <- cand_b
+      }
+
+      if (!is.null(chosen)) {
+        source_desc <- if (chosen$start == chosen$end) {
+          sprintf("Line %d of %s", chosen$start, fname)
+        } else {
+          sprintf("Lines %d-%d of %s", chosen$start, chosen$end, fname)
+        }
+        return(list(code = chosen$code, source = source_desc, line_start = chosen$start, line_end = chosen$end))
+      }
+    }
+  }
+
+  # Tier 3: Console expressions & error calls
+  last_err_cmd <- tryCatch(converser_env[["last_error_code"]], error = function(e) NULL)
+  if (!is.null(last_err_cmd) && nzchar(trimws(last_err_cmd))) {
+    return(list(code = trimws(last_err_cmd), source = "R Console", line_start = NA_integer_, line_end = NA_integer_))
+  }
+
+  last_console <- tryCatch(converser_env[["last_console_code"]], error = function(e) NULL)
+  if (!is.null(last_console) && nzchar(trimws(last_console))) {
+    if (!is.null(err_call)) {
+      fn_name <- sub("\\(.*$", "", err_call)
+      if (grepl(err_call, last_console, fixed = TRUE) ||
+          (nzchar(fn_name) && grepl(fn_name, last_console, fixed = TRUE))) {
+        return(list(code = trimws(last_console), source = "R Console", line_start = NA_integer_, line_end = NA_integer_))
+      }
+    }
+  }
+
+  if (!is.null(rlang_call) && nzchar(trimws(rlang_call))) {
+    return(list(code = trimws(rlang_call), source = "Failed Call (rlang)", line_start = NA_integer_, line_end = NA_integer_))
+  }
+
+  if (!is.null(err_call) && nzchar(trimws(err_call))) {
+    return(list(code = trimws(err_call), source = "Failed Call", line_start = NA_integer_, line_end = NA_integer_))
+  }
+
+  if (!is.null(last_console) && nzchar(trimws(last_console))) {
+    return(list(code = trimws(last_console), source = "R Console", line_start = NA_integer_, line_end = NA_integer_))
+  }
+
+  NULL
+}
+
+#' Capture the most recent R error message, failing code, and rlang backtrace
+#' @param context Optional editor context (as returned by `get_safe_editor_context()`).
+#' @keywords internal
+capture_error_context <- function(context = NULL) {
+  if (is.null(context)) {
+    context <- get_safe_editor_context()
+  }
+
   raw_err <- trimws(geterrmessage())
 
   # Guard: calling `rlang::last_error()` when no rlang error has occurred
@@ -221,9 +412,28 @@ capture_error_context <- function() {
 
   rlang_err <- tryCatch(rlang::last_error(), error = function(e) NULL)
 
+  if (!nzchar(err_msg) && is.null(rlang_err) && is.null(converser_env[["last_error_code"]])) {
+    return("No recent R error recorded in this session.")
+  }
+
+  # Extract failing code line/block
+  failing <- extract_failing_code(context = context, err_msg = err_msg, rlang_err = rlang_err)
+
   res <- character(0)
+  if (!is.null(failing) && nzchar(trimws(failing$code))) {
+    src_label <- if (nzchar(failing$source %||% "")) sprintf(" [%s]", failing$source) else ""
+    res <- c(
+      sprintf("Code line/statement that led to the error%s:", src_label),
+      "```r",
+      failing$code,
+      "```",
+      ""
+    )
+  }
+
   if (nzchar(err_msg)) {
     res <- c(
+      res,
       "Last R error message (geterrmessage()):",
       err_msg
     )

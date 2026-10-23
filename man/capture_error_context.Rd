@@ -2,11 +2,14 @@
 % Please edit documentation in R/tools.R
 \name{capture_error_context}
 \alias{capture_error_context}
-\title{Capture the most recent R error message and rlang backtrace}
+\title{Capture the most recent R error message, failing code, and rlang backtrace}
 \usage{
-capture_error_context()
+capture_error_context(context = NULL)
+}
+\arguments{
+\item{context}{Optional editor context (as returned by \code{get_safe_editor_context()}).}
 }
 \description{
-Capture the most recent R error message and rlang backtrace
+Capture the most recent R error message, failing code, and rlang backtrace
 }
 \keyword{internal}

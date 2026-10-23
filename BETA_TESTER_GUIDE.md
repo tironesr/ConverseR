@@ -70,7 +70,7 @@ Hi everyone,
 Thank you for helping beta test **ConverseR**, a new RStudio package that integrates OpenRouter language models directly into RStudio with:
 - A **non-blocking Viewer Sidebar (`converser()`)** that automatically reads your active script and `.GlobalEnv` data frames/models while keeping your R Console free for coding.
 - A **keyboard-driven Inline Code Assistant (`converser_inline()`)** for quick code replacements and insertions.
-- **One-click Plot Sharing (`Share Plot`)** and **Console/Script Error Diagnosis (`Fix Error`)**.
+- **One-click Plot Sharing (`Share Plot`)** and **Console/Script Error Diagnosis (`Fix Error`)**: Automatically captures the failing line of code, line number, script context, and error backtrace for instant fixes.
 - **Persistent Settings & Custom Skills (`SKILL.md` / `Skill.zip`)** so the assistant follows your personal R coding and statistical conventions across sessions without editing `.Rprofile`.
 
 ### Step 1: Install `ConverseR` (Works on both macOS & Windows)

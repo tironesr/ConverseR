@@ -24,6 +24,9 @@ converser_env <- rlang::new_environment()
       error = function(e) NULL
     )
   )
+
+  # Ensure task callback is active to track console commands and viewer events
+  tryCatch(ensure_viewer_task_callback(), error = function(e) NULL)
 }
 
 .onAttach <- function(libname, pkgname) {

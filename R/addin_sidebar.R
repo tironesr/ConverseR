@@ -285,6 +285,18 @@ converser_debounce_notice <- function(delay = 0.35) {
 }
 
 converser_viewer_callback_handler <- function(expr, value, ok, visible, now = FALSE) {
+  # Track the most recent console expression & errors for diagnostic tools
+  if (!missing(expr) && !is.null(expr)) {
+    code_str <- tryCatch(paste(deparse(expr), collapse = "\n"), error = function(e) "")
+    if (nzchar(code_str) && !grepl("^addTaskCallback", code_str)) {
+      converser_env[["last_console_code"]] <- code_str
+      converser_env[["last_console_time"]] <- Sys.time()
+      if (!isTRUE(ok)) {
+        converser_env[["last_error_code"]] <- code_str
+      }
+    }
+  }
+
   if (isTRUE(converser_env[["viewer_overwritten"]])) {
     if (isTRUE(now)) {
       converser_deliver_viewer_notice()
