@@ -336,6 +336,21 @@ has_active_selection <- function() {
   nzchar(sel_text)
 }
 
+detect_active_model_selection <- function() {
+  ctx <- get_safe_editor_context()
+  if (is.null(ctx)) return(list(has_selection = FALSE, has_model = FALSE, model_fn = NULL))
+  sel_text <- tryCatch(rstudioapi::primary_selection(ctx)$text %||% "", error = function(e) "")
+  if (!nzchar(sel_text)) {
+    return(list(has_selection = FALSE, has_model = FALSE, model_fn = NULL))
+  }
+  model_fn <- detect_model_function(sel_text)
+  list(
+    has_selection = TRUE,
+    has_model = !is.null(model_fn),
+    model_fn = model_fn
+  )
+}
+
 # HTTP Request Router (`httpuv`) -----------------------------------------------
 
 handle_sidebar_http_request <- function(req) {
@@ -404,7 +419,13 @@ dispatch_api_route <- function(path, body) {
     return(api_get_state())
   }
   if (identical(path, "/api/selection")) {
-    return(list(ok = TRUE, has_selection = has_active_selection()))
+    sel_info <- detect_active_model_selection()
+    return(list(
+      ok = TRUE,
+      has_selection = sel_info$has_selection,
+      has_model = sel_info$has_model,
+      model_fn = sel_info$model_fn
+    ))
   }
   if (identical(path, "/api/settings")) {
     return(list(ok = TRUE, settings = inspect_current_settings()))
@@ -475,11 +496,15 @@ api_get_state <- function() {
     m
   })
 
+  sel_info <- detect_active_model_selection()
+
   list(
     ok = TRUE,
     model = model_short,
     full_model = model_name,
-    has_selection = has_active_selection(),
+    has_selection = sel_info$has_selection,
+    has_model = sel_info$has_model,
+    model_fn = sel_info$model_fn,
     has_skill = nzchar(trimws(get_active_skill_text())),
     settings = inspect_current_settings(),
     messages = msgs
@@ -631,6 +656,7 @@ api_post_chat <- function(body) {
   inc_err <- isTRUE(body$inc_err)
   inc_plot <- isTRUE(body$inc_plot)
   force_whole_doc <- isTRUE(body$force_whole_doc)
+  is_consult <- isTRUE(body$is_consult)
 
   ctx <- get_safe_editor_context()
   chat <- converser_env[["active_chat"]] %||% get_converser_chat(register_tools = TRUE)
@@ -638,7 +664,8 @@ api_post_chat <- function(body) {
     return(list(ok = FALSE, error = "No OpenRouter API key configured yet. Click Settings in the top bar to enter your key and save your defaults."))
   }
 
-  chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar"))
+  has_sel <- !is.null(ctx) && nzchar(rstudioapi::primary_selection(ctx)$text %||% "")
+  chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar", has_selection = has_sel, is_consult = is_consult))
   prune_chat_turn_payloads(chat)
   converser_env[["active_chat"]] <- chat
 
@@ -690,7 +717,8 @@ api_post_chat <- function(body) {
     context = ctx,
     include_env = TRUE,
     include_error = inc_err,
-    force_whole_doc = force_whole_doc,
+    force_whole_doc = force_whole_doc || is_consult,
+    is_consult = is_consult,
     cache_context = TRUE
   )
 
@@ -727,14 +755,15 @@ api_post_chat <- function(body) {
             {
               fallback_chat <- get_converser_chat(register_tools = FALSE)
               strip_reasoning_from_chat(fallback_chat)
-              fallback_chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar"))
+              fallback_chat$set_system_prompt(construct_system_prompt(context = ctx, mode = "sidebar", has_selection = has_sel, is_consult = is_consult))
               converser_clear_context_cache()
               fresh_turn <- construct_turn(
                 user_prompt = prompt_str,
                 context = ctx,
                 include_env = TRUE,
                 include_error = inc_err,
-                force_whole_doc = force_whole_doc,
+                force_whole_doc = force_whole_doc || is_consult,
+                is_consult = is_consult,
                 cache_context = TRUE
               )
               res_fb <- fallback_chat$chat(fresh_turn, echo = "none")
@@ -769,9 +798,12 @@ api_post_chat <- function(body) {
   msgs <- c(msgs, list(list(role = "assistant", html = assistant_html, raw_md = clean_md)))
   converser_env[["chat_history_ui"]] <- msgs
 
+  sel_info <- detect_active_model_selection()
   list(
     ok = TRUE,
-    has_selection = has_active_selection(),
+    has_selection = sel_info$has_selection,
+    has_model = sel_info$has_model,
+    model_fn = sel_info$model_fn,
     messages = msgs
   )
 }
@@ -787,9 +819,12 @@ api_post_diff <- function(body) {
   }
 
   diff_html <- as.character(render_code_diff_html(sel_text, proposed))
+  sel_info <- detect_active_model_selection()
   list(
     ok = TRUE,
     has_selection = nzchar(sel_text),
+    has_model = sel_info$has_model,
+    model_fn = sel_info$model_fn,
     diff_html = diff_html
   )
 }
@@ -844,7 +879,14 @@ api_post_apply <- function(body) {
     msg <- "Inserted into script (Undo available)"
   }
 
-  list(ok = TRUE, message = msg, has_selection = has_active_selection())
+  sel_info <- detect_active_model_selection()
+  list(
+    ok = TRUE,
+    message = msg,
+    has_selection = sel_info$has_selection,
+    has_model = sel_info$has_model,
+    model_fn = sel_info$model_fn
+  )
 }
 
 # Execute code directly in the R Console without touching the active script
@@ -1032,6 +1074,12 @@ sidebar_single_page_html <- function() {
   .rc-pill-btn.active {
     background: #2563eb; border-color: #1d4ed8; color: #ffffff;
   }
+  .rc-pill-consult {
+    background: #fdf4ff; border-color: #f0abfc; color: #a21caf; font-weight: 600;
+  }
+  .rc-pill-consult:hover {
+    background: #fae8ff; border-color: #e879f9; color: #86198f;
+  }
   .rc-input-row { display: flex; gap: 6px; align-items: flex-end; }
   textarea, input[type="text"], input[type="password"], select {
     border: 1px solid #cbd5e1; border-radius: 6px;
@@ -1113,6 +1161,7 @@ sidebar_single_page_html <- function() {
       <button class="rc-pill-btn" id="full_doc_btn" onclick="toggleFullDoc()" title="Click to force sending the entire document (or mention keywords like in this document or all figures)">Full Script</button>
       <button class="rc-pill-btn" id="share_plot_btn" onclick="toggleSharePlot()" title="Toggle to attach your active R plot image to your next message">Share Plot</button>
       <button class="rc-pill-btn" onclick="quickAction(\'error\')" title="Diagnose &amp; fix the last R error">Fix Error</button>
+      <button class="rc-pill-btn rc-pill-consult" id="consult_btn" onclick="quickAction(\'consult\')" style="display:none;" title="Start an interactive statistical consultation on the highlighted model specification">⚖️ Model Consultation</button>
     </div>
     <span class="rc-status" id="status_text">Ready</span>
   </div>
@@ -1255,6 +1304,8 @@ sidebar_single_page_html <- function() {
 <script>
 let isSending = false;
 let hasEditorSelection = false;
+let hasModelSelection = false;
+let activeModelFn = null;
 let sharePlotAttached = false;
 let currentAbortController = null;
 
@@ -1355,14 +1406,31 @@ function toggleSharePlot() {
   }
 }
 
-function updateReplaceButtonsState(hasSel) {
+function updateSelectionState(hasSel, hasModel, modelFn) {
   hasEditorSelection = !!hasSel;
+  hasModelSelection = !!hasModel;
+  activeModelFn = modelFn || null;
+
   document.querySelectorAll(\'[data-mode="replace"]\').forEach(btn => {
     btn.disabled = !hasEditorSelection;
     btn.title = hasEditorSelection
       ? "Replace highlighted selection in active script"
       : "Highlight code in your RStudio script to enable Replace (or use Run in Console)";
   });
+
+  const consultBtn = document.getElementById("consult_btn");
+  if (consultBtn) {
+    if (hasModelSelection) {
+      consultBtn.style.display = "inline-block";
+      consultBtn.textContent = activeModelFn ? `⚖️ Model Consultation (${activeModelFn})` : "⚖️ Model Consultation";
+    } else {
+      consultBtn.style.display = "none";
+    }
+  }
+}
+
+function updateReplaceButtonsState(hasSel) {
+  updateSelectionState(hasSel, hasModelSelection, activeModelFn);
 }
 
 let isCheckingSelection = false;
@@ -1377,14 +1445,18 @@ async function refreshSelectionState() {
   try {
     const res = await fetch("/api/selection");
     const data = await res.json();
-    if (data.ok && data.has_selection !== hasEditorSelection) {
-      updateReplaceButtonsState(data.has_selection);
+    if (data.ok) {
+      updateSelectionState(data.has_selection, data.has_model, data.model_fn);
     }
   } catch (e) {
   } finally {
     isCheckingSelection = false;
   }
 }
+
+setInterval(refreshSelectionState, 1800);
+window.addEventListener("focus", refreshSelectionState);
+document.addEventListener("mouseenter", refreshSelectionState);
 
 function renderMessages(messages, scrollBehavior = "smooth") {
   const box = document.getElementById("chat_box");
@@ -1414,7 +1486,7 @@ function renderMessages(messages, scrollBehavior = "smooth") {
   }).join("");
 
   enhanceCodeBlocks(shouldAutoOpenLastDiff);
-  updateReplaceButtonsState(hasEditorSelection);
+  updateSelectionState(hasEditorSelection, hasModelSelection, activeModelFn);
 
   // Position viewport at the TOP of the new assistant message rather than pulling down to the bottom
   const assistantMsgs = box.querySelectorAll(".rc-msg-assistant");
@@ -1534,7 +1606,7 @@ function enhanceCodeBlocks(autoOpenLastDiff = false) {
         });
         const data = await res.json();
         if (data.ok) {
-          updateReplaceButtonsState(data.has_selection);
+          updateSelectionState(data.has_selection, data.has_model, data.model_fn);
           const hdr = data.has_selection
             ? `<span>Red = Current Selection | Green = Proposed</span>`
             : `<span>Nothing highlighted in editor (showing proposed code)</span>`;
@@ -1867,7 +1939,7 @@ async function loadState() {
     if (!data.ok) return;
     document.getElementById("model_badge").textContent = data.model || "deepseek-v4.1-flash";
     document.getElementById("skill_badge").classList.toggle("active", !!data.has_skill);
-    hasEditorSelection = !!data.has_selection;
+    updateSelectionState(data.has_selection, data.has_model, data.model_fn);
     if (data.settings) populateSettingsForm(data.settings);
     renderMessages(data.messages || [], "auto");
     fetchOpenRouterModels(false);
@@ -1912,7 +1984,7 @@ async function sendChat() {
   await sendPromptInternal(text, false, attachPlot, forceDoc);
 }
 
-async function sendPromptInternal(promptText, incErr, incPlot, forceDoc = false) {
+async function sendPromptInternal(promptText, incErr, incPlot, forceDoc = false, isConsult = false) {
   if (isSending) return;
   setThinkingUI(true);
   currentAbortController = new AbortController();
@@ -1934,13 +2006,14 @@ async function sendPromptInternal(promptText, incErr, incPlot, forceDoc = false)
         prompt: promptText,
         inc_err: !!incErr,
         inc_plot: !!incPlot,
-        force_whole_doc: !!forceDoc
+        force_whole_doc: !!forceDoc,
+        is_consult: !!isConsult
       }),
       signal: currentAbortController.signal
     });
     const data = await res.json();
     if (data.ok) {
-      hasEditorSelection = !!data.has_selection;
+      updateSelectionState(data.has_selection, data.has_model, data.model_fn);
       renderMessages(data.messages || []);
       setStatus("Ready");
     } else {
@@ -1976,6 +2049,15 @@ async function sendPromptInternal(promptText, incErr, incPlot, forceDoc = false)
 function quickAction(type) {
   if (type === "error") {
     sendPromptInternal("Diagnose my last R error and provide the corrected R code.", true, false);
+  } else if (type === "consult") {
+    const fnName = activeModelFn ? `\`${activeModelFn}()\`` : "the highlighted model";
+    sendPromptInternal(
+      `I have highlighted ${fnName}. Please evaluate this model specification in the context of my entire script and data, walk through the key statistical tradeoffs and alternatives in clear non-jargony language, and suggest recommended improvements or diagnostic checks.`,
+      false,
+      false,
+      true,
+      true
+    );
   }
 }
 
@@ -1989,7 +2071,7 @@ async function applyCode(mode, code) {
   if (data.ok) {
     setStatus(data.message);
     if (typeof data.has_selection !== "undefined") {
-      updateReplaceButtonsState(data.has_selection);
+      updateSelectionState(data.has_selection, data.has_model, data.model_fn);
     }
   } else {
     setStatus(data.error || "Could not apply");

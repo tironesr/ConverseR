@@ -42,7 +42,8 @@ initialize_assistant <- function(
 construct_system_prompt <- function(
   context = NULL,
   mode = c("inline", "sidebar"),
-  has_selection = FALSE
+  has_selection = FALSE,
+  is_consult = FALSE
 ) {
   mode <- arg_match(mode)
   ext <- if (!is.null(context)) file_extension(context$path) else "r"
@@ -130,10 +131,28 @@ construct_system_prompt <- function(
 
     paste0(base_persona, style_section, skill_section, "\n\n", format_rules, selection_rule)
   } else {
+    consult_section <- if (isTRUE(is_consult)) {
+      paste0(
+        "\n\n## ACTIVE WORKFLOW: STATISTICAL MODEL CONSULTATION\n",
+        "You are acting as an empathetic, seasoned statistical advisor helping the user evaluate, specify, and refine their highlighted statistical model.\n",
+        "1. STRICT NON-JARGONY COMMUNICATION:\n",
+        "   - Use clear, accessible, and intuitive English. Avoid dense, exclusionary mathematical jargon.\n",
+        "   - When technical statistical concepts arise (e.g., random slopes, shrinkage, singular fits, overdispersion, zero-inflation, link functions, heteroscedasticity, multicollinearity), immediately explain what they mean in practical, intuitive terms for the user's data.\n",
+        "   - Speak conversationally and directly address the researcher's empirical needs.\n",
+        "2. STRUCTURED 3-STEP CONSULTATION:\n",
+        "   - Step 1: Diagnose & Understand the Goal. Acknowledge the highlighted model call, response variable, and predictors. Reference relevant variables and sample sizes from their active script and .GlobalEnv. If anything is ambiguous, ask 1-2 focused questions about their empirical objective (e.g., hypothesis testing vs prediction, within-subject vs between-subject questions).\n",
+        "   - Step 2: Concrete Tradeoffs & Options. Contrast 2 to 3 specification alternatives (e.g., a simple baseline vs a more comprehensive/maximal model). Clearly explain the practical pros and cons of each (e.g., risk of omitted variable bias vs risk of non-convergence or overfitting, degrees of freedom, interpretability).\n",
+        "   - Step 3: Ready-to-Run Code & Diagnostics. Provide the recommended model syntax inside a standard ```r ... ``` code block with brief explanatory inline comments (#). Suggest 1-2 straightforward diagnostic checks (e.g., residual check, summary, or check_model).\n"
+      )
+    } else {
+      ""
+    }
+
     paste0(
       base_persona,
       style_section,
-      skill_section, "\n\n",
+      skill_section,
+      consult_section, "\n\n",
       "When providing code that modifies or replaces the user's active selection or script, ",
       "always place the complete, ready-to-run R code inside a standard fenced code block ",
       "(```r ... ```) so the user can one-click Run in Console, Preview Difference, Insert, or Replace. ",
@@ -170,6 +189,7 @@ construct_turn <- function(
   include_env = TRUE,
   include_error = FALSE,
   force_whole_doc = FALSE,
+  is_consult = FALSE,
   window_lines = get_converser_window(),
   cache_context = FALSE
 ) {
@@ -202,8 +222,17 @@ construct_turn <- function(
     character(0)
   }
 
+  effective_prompt <- if (isTRUE(is_consult)) {
+    paste0(
+      "[Model Consultation Request]: The user has highlighted a statistical model call and requested an interactive statistical consultation. Examine the model call, full script, and .GlobalEnv data objects, then provide tailored, non-jargony guidance.\n\n",
+      user_prompt
+    )
+  } else {
+    user_prompt
+  }
+
   construct_turn_impl(
-    user_prompt = user_prompt,
+    user_prompt = effective_prompt,
     code_context = code_ctx,
     env_context = env_ctx,
     error_context = err_ctx

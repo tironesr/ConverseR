@@ -15,6 +15,108 @@ detect_whole_document_intent <- function(prompt) {
   any(vapply(patterns, function(pat) grepl(pat, p, perl = TRUE), logical(1)))
 }
 
+#' Supported statistical model functions recognized by ConverseR Model Consultation
+#' @keywords internal
+supported_model_functions <- function() {
+  list(
+    # Standard Linear Models & ANOVA
+    list(name = "lm", package = "stats", family = "Linear Models"),
+    list(name = "aov", package = "stats", family = "Analysis of Variance"),
+    list(name = "anova", package = "stats", family = "Analysis of Variance"),
+    list(name = "manova", package = "stats", family = "Multivariate ANOVA"),
+    list(name = "Anova", package = "car", family = "Analysis of Variance (Type II/III)"),
+
+    # Generalized Linear & Count Models
+    list(name = "glm", package = "stats", family = "Generalized Linear Models"),
+    list(name = "glm.nb", package = "MASS", family = "Negative Binomial"),
+    list(name = "zeroinfl", package = "pscl", family = "Zero-Inflated Count Models"),
+    list(name = "hurdle", package = "pscl", family = "Hurdle Count Models"),
+
+    # Mixed-Effects & Multilevel Models
+    list(name = "lmer", package = "lme4", family = "Linear Mixed-Effects"),
+    list(name = "glmer", package = "lme4", family = "Generalized Linear Mixed-Effects"),
+    list(name = "nlmer", package = "lme4", family = "Nonlinear Mixed-Effects"),
+    list(name = "lme", package = "nlme", family = "Linear Mixed-Effects"),
+    list(name = "glmmTMB", package = "glmmTMB", family = "Generalized Linear Mixed-Effects"),
+
+    # Econometric, Fixed Effects & Panel Models
+    list(name = "feols", package = "fixest", family = "High-Dimensional Fixed Effects"),
+    list(name = "feglm", package = "fixest", family = "GLM with Fixed Effects"),
+    list(name = "fepois", package = "fixest", family = "Poisson with Fixed Effects"),
+    list(name = "fenegbin", package = "fixest", family = "Negative Binomial with Fixed Effects"),
+    list(name = "feNmlm", package = "fixest", family = "Nonlinear Fixed Effects"),
+    list(name = "plm", package = "plm", family = "Panel Linear Models"),
+    list(name = "ivreg", package = "AER/ivreg", family = "Instrumental Variables"),
+
+    # Bayesian Models
+    list(name = "brm", package = "brms", family = "Bayesian Regression (Stan)"),
+    list(name = "stan_glm", package = "rstanarm", family = "Bayesian GLM"),
+    list(name = "stan_glmer", package = "rstanarm", family = "Bayesian GLMM"),
+    list(name = "stan_lmer", package = "rstanarm", family = "Bayesian Linear Mixed Models"),
+
+    # Generalized Additive Models (GAMs)
+    list(name = "gam", package = "mgcv", family = "Generalized Additive Models"),
+    list(name = "bam", package = "mgcv", family = "Big Data Additive Models"),
+
+    # Survival Analysis
+    list(name = "coxph", package = "survival", family = "Cox Proportional Hazards"),
+    list(name = "survreg", package = "survival", family = "Parametric Survival Models"),
+
+    # Ordinal, Multinomial & Categorical
+    list(name = "polr", package = "MASS", family = "Proportional Odds Logistic Regression"),
+    list(name = "multinom", package = "nnet", family = "Multinomial Logit"),
+    list(name = "clm", package = "ordinal", family = "Cumulative Link Models"),
+    list(name = "clmm", package = "ordinal", family = "Cumulative Link Mixed Models"),
+
+    # Structural Equation Modeling (SEM)
+    list(name = "sem", package = "lavaan", family = "Structural Equation Models"),
+    list(name = "cfa", package = "lavaan", family = "Confirmatory Factor Analysis"),
+    list(name = "growth", package = "lavaan", family = "Latent Growth Curve Models"),
+
+    # Robust & Quantile Regression
+    list(name = "rlm", package = "MASS", family = "Robust Linear Models"),
+    list(name = "lmrob", package = "robustbase", family = "Robust Linear Regression"),
+    list(name = "glmrob", package = "robustbase", family = "Robust Generalized Linear Models"),
+    list(name = "rq", package = "quantreg", family = "Quantile Regression"),
+
+    # Longitudinal & Generalized Estimating Equations (GEE)
+    list(name = "geeglm", package = "geepack", family = "Generalized Estimating Equations"),
+    list(name = "gee", package = "gee", family = "Generalized Estimating Equations"),
+
+    # Meta-Analysis
+    list(name = "rma", package = "metafor", family = "Meta-Analysis Models"),
+    list(name = "rma.uni", package = "metafor", family = "Meta-Analysis Models"),
+    list(name = "rma.mv", package = "metafor", family = "Multivariate Meta-Analysis")
+  )
+}
+
+#' Detect if a text string contains a statistical model function call
+#'
+#' @param text Character string to test (usually highlighted editor selection).
+#' @returns The lower-cased name of the detected model function, or NULL if none.
+#' @keywords internal
+detect_model_function <- function(text) {
+  if (is.null(text) || !is.character(text) || length(text) == 0) return(NULL)
+  raw <- paste(text, collapse = "\n")
+  if (!nzchar(trimws(raw))) return(NULL)
+
+  fns <- vapply(supported_model_functions(), function(x) x$name, character(1))
+  pattern <- sprintf(
+    "(?i)(?:^|[^a-zA-Z0-9._:])(?:[a-zA-Z0-9._]+::)?(%s)\\s*\\(",
+    paste(gsub("\\.", "\\\\.", fns), collapse = "|")
+  )
+
+  m <- regexec(pattern, raw, perl = TRUE)[[1]]
+  if (m[1] == -1L || length(m) < 2L) return(NULL)
+
+  start_pos <- m[2]
+  len <- attr(m, "match.length")[2]
+  if (is.na(start_pos) || is.na(len) || start_pos <= 0L || len <= 0L) return(NULL)
+
+  matched <- tolower(substring(raw, start_pos, start_pos + len - 1L))
+  matched
+}
+
 #' Extract active Quarto/RMarkdown code chunk or 250-line backup window
 #' @keywords internal
 extract_active_chunk_or_window <- function(contents, cursor_line = 1L, ext = "r", backup_window = 125L) {

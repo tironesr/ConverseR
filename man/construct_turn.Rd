@@ -10,6 +10,7 @@ construct_turn(
   include_env = TRUE,
   include_error = FALSE,
   force_whole_doc = FALSE,
+  is_consult = FALSE,
   window_lines = get_converser_window(),
   cache_context = FALSE
 )

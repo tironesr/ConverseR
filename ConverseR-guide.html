@@ -372,11 +372,12 @@
     <a class="nav-link" href="#context-efficiency" style="padding-left: 20px; font-size: 12.5px;">&rdquor; Code Context &amp; Full Script</a>
     <a class="nav-link" href="#inline">6. Inline Code Edits</a>
     <a class="nav-link" href="#plots-errors">7. Sharing Plots &amp; Fixing Errors</a>
+    <a class="nav-link" href="#consult">8. Model Consultation</a>
 
     <div class="nav-group-title">Customization</div>
-    <a class="nav-link" href="#reasoning">8. Models, Privacy &amp; Reasoning</a>
-    <a class="nav-link" href="#skills">9. Setting Up SKILL.md &amp; Skill.zip</a>
-    <a class="nav-link" href="#reference">10. Function Reference</a>
+    <a class="nav-link" href="#reasoning">9. Models, Privacy &amp; Reasoning</a>
+    <a class="nav-link" href="#skills">10. Setting Up SKILL.md &amp; Skill.zip</a>
+    <a class="nav-link" href="#reference">11. Function Reference</a>
   </aside>
 
   <main class="content">
@@ -665,9 +666,144 @@ converser_use_openrouter(
       </div>
     </section>
 
-    <!-- 8. MODELS & REASONING -->
+    <!-- 8. MODEL CONSULTATION -->
+    <section id="consult">
+      <h2><span class="step-num">8</span> Model Consultation: Interactive Statistical Guidance</h2>
+      <p>
+        Specifying an empirical model involves nuanced tradeoffs: balancing realism and confounding controls against overfitting, multicollinearity, degrees of freedom, and convergence failures. When you highlight a statistical model in your R script, ConverseR provides dedicated <strong>Model Consultation</strong>.
+      </p>
+
+      <h3>How It Works</h3>
+      <ul>
+        <li>
+          <strong>Automatic Context Detection:</strong> Whenever you highlight code containing a supported statistical model (e.g., <code>lmer()</code>, <code>lm()</code>, <code>glm()</code>, <code>feols()</code>, <code>brm()</code>), the purple <strong>⚖️ Model Consultation</strong> button dynamically appears above the sidebar prompt box. If nothing or non-modeling code is selected, the button remains hidden.
+        </li>
+        <li>
+          <strong>Whole-Script &amp; Environment Grounding:</strong> Clicking <strong>Model Consultation</strong> automatically sends your full script pipeline and active <code>.GlobalEnv</code> dataset summaries to the assistant. The model evaluates not just the isolated formula line, but your preceding data cleaning steps, variable transformations, clustering structures, sample sizes, and empirical questions.
+        </li>
+      </ul>
+
+      <div class="callout" style="background: #fdf4ff; border-color: #f0abfc; color: #701a75;">
+        <strong>Strictly Non-Jargony Statistical Guidance:</strong><br/>
+        Too many statistical tools bury practical insights under dense academic gatekeeping, abstract notation, or exclusionary jargon. ConverseR’s Model Consultation is engineered to communicate in <strong>clear, intuitive, and practical English</strong>. When technical concepts arise—such as random slopes, shrinkage, singular fits, overdispersion, zero-inflation, link functions, or heteroscedasticity—the consultant immediately translates them into concrete real-world meaning for your specific variables and data structure.
+      </div>
+
+      <h3>Structured 3-Step Consultation Workflow</h3>
+      <div class="card-grid">
+        <div class="card">
+          <h4>1. Diagnose &amp; Understand the Goal</h4>
+          <p>
+            The consultant identifies your response variable, predictors, clustering dimensions, and sample size. If your research objective is ambiguous, it clarifies whether you aim to test a specific causal hypothesis, maximize out-of-sample prediction, or estimate within-subject vs. between-subject effects.
+          </p>
+        </div>
+        <div class="card">
+          <h4>2. Concrete Tradeoffs &amp; Alternatives</h4>
+          <p>
+            Rather than asserting a single "correct" answer, the consultant contrasts 2 to 3 viable specification alternatives (e.g., a simple baseline vs. a maximal random-effects structure, or Poisson vs. Negative Binomial). It explicitly breaks down the practical pros and cons of each in terms of interpretability, power, and risk of misspecification.
+          </p>
+        </div>
+        <div class="card">
+          <h4>3. Ready-to-Run Code &amp; Diagnostics</h4>
+          <p>
+            You receive ready-to-run R code in a standard code block with concise inline comments explaining key arguments. Each recommendation is paired with straightforward diagnostic checks (e.g., checking residual plots, variance inflation factors, or convergence checks) that you can execute immediately with <strong>Run in Console</strong> or <strong>Replace</strong>.
+          </p>
+        </div>
+      </div>
+
+      <h3>Compatible Models &amp; Packages</h3>
+      <p>
+        Model Consultation automatically recognizes 44 core modeling functions across 12 statistical families, covering virtually all modern empirical workflows in R:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Statistical Family</th>
+            <th>Supported Functions</th>
+            <th>Common Packages</th>
+            <th>Typical Use Cases</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Linear &amp; ANOVA</strong></td>
+            <td><code>lm</code>, <code>aov</code>, <code>anova</code>, <code>Anova</code>, <code>manova</code></td>
+            <td><code>stats</code>, <code>car</code></td>
+            <td>Standard regression, factorial experiments, between/within-subjects ANOVA.</td>
+          </tr>
+          <tr>
+            <td><strong>Generalized Linear &amp; Count</strong></td>
+            <td><code>glm</code>, <code>glm.nb</code>, <code>zeroinfl</code>, <code>hurdle</code></td>
+            <td><code>stats</code>, <code>MASS</code>, <code>pscl</code></td>
+            <td>Binary outcomes (logistic), rates/counts (Poisson, Negative Binomial, hurdle/zero-inflated).</td>
+          </tr>
+          <tr>
+            <td><strong>Mixed-Effects &amp; Multilevel</strong></td>
+            <td><code>lmer</code>, <code>glmer</code>, <code>nlmer</code>, <code>lme</code>, <code>glmmTMB</code></td>
+            <td><code>lme4</code>, <code>nlme</code>, <code>glmmTMB</code></td>
+            <td>Repeated measures, hierarchical/clustered data, random intercepts and random slopes.</td>
+          </tr>
+          <tr>
+            <td><strong>Econometric &amp; Fixed Effects</strong></td>
+            <td><code>feols</code>, <code>feglm</code>, <code>fepois</code>, <code>fenegbin</code>, <code>feNmlm</code>, <code>plm</code>, <code>ivreg</code></td>
+            <td><code>fixest</code>, <code>plm</code>, <code>AER</code>, <code>ivreg</code></td>
+            <td>High-dimensional fixed effects, panel data (within/first-difference), instrumental variables (2SLS).</td>
+          </tr>
+          <tr>
+            <td><strong>Bayesian Regression</strong></td>
+            <td><code>brm</code>, <code>stan_glm</code>, <code>stan_glmer</code>, <code>stan_lmer</code></td>
+            <td><code>brms</code>, <code>rstanarm</code></td>
+            <td>Bayesian multilevel modeling, prior specification, posterior predictive checks.</td>
+          </tr>
+          <tr>
+            <td><strong>Generalized Additive Models (GAMs)</strong></td>
+            <td><code>gam</code>, <code>bam</code></td>
+            <td><code>mgcv</code></td>
+            <td>Nonlinear smooth functional relationships, splines, large-scale additive modeling.</td>
+          </tr>
+          <tr>
+            <td><strong>Survival Analysis</strong></td>
+            <td><code>coxph</code>, <code>survreg</code></td>
+            <td><code>survival</code></td>
+            <td>Time-to-event outcomes, proportional hazards, parametric accelerated failure time models.</td>
+          </tr>
+          <tr>
+            <td><strong>Ordinal &amp; Multinomial</strong></td>
+            <td><code>polr</code>, <code>multinom</code>, <code>clm</code>, <code>clmm</code></td>
+            <td><code>MASS</code>, <code>nnet</code>, <code>ordinal</code></td>
+            <td>Likert scales, ordered categorical ratings, nominal multi-category choices.</td>
+          </tr>
+          <tr>
+            <td><strong>Structural Equation Modeling (SEM)</strong></td>
+            <td><code>sem</code>, <code>cfa</code>, <code>growth</code></td>
+            <td><code>lavaan</code></td>
+            <td>Confirmatory factor analysis, latent variable path modeling, latent growth curves.</td>
+          </tr>
+          <tr>
+            <td><strong>Robust &amp; Quantile</strong></td>
+            <td><code>rlm</code>, <code>lmrob</code>, <code>glmrob</code>, <code>rq</code></td>
+            <td><code>MASS</code>, <code>robustbase</code>, <code>quantreg</code></td>
+            <td>Outlier-resistant estimation, heavy-tailed residuals, median and quantile regression.</td>
+          </tr>
+          <tr>
+            <td><strong>GEE &amp; Longitudinal</strong></td>
+            <td><code>geeglm</code>, <code>gee</code></td>
+            <td><code>geepack</code>, <code>gee</code></td>
+            <td>Population-averaged marginal models for correlated longitudinal outcomes.</td>
+          </tr>
+          <tr>
+            <td><strong>Meta-Analysis</strong></td>
+            <td><code>rma</code>, <code>rma.uni</code>, <code>rma.mv</code></td>
+            <td><code>metafor</code></td>
+            <td>Fixed- and random-effects meta-analyses, multivariate and multilevel effect sizes.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 9. MODELS & REASONING -->
     <section id="reasoning">
-      <h2><span class="step-num">8</span> Models, Privacy (ZDR) &amp; Reasoning Levels</h2>
+      <h2><span class="step-num">9</span> Models, Privacy (ZDR) &amp; Reasoning Levels</h2>
       <p>
         In <strong>Settings</strong>, the model dropdown automatically lists the <strong>Top 20 OpenRouter Models</strong>. Click <strong>Show All Models</strong> to load the complete OpenRouter catalog, or type any model ID into the search box.
       </p>
@@ -712,9 +848,9 @@ converser_use_openrouter(
       </div>
     </section>
 
-    <!-- 9. SKILL.MD & SKILL.ZIP -->
+    <!-- 10. SKILL.MD & SKILL.ZIP -->
     <section id="skills">
-      <h2><span class="step-num">9</span> Setting Up <code>SKILL.md</code> or <code>Skill.zip</code> to Guide Coding</h2>
+      <h2><span class="step-num">10</span> Setting Up <code>SKILL.md</code> or <code>Skill.zip</code> to Guide Coding</h2>
 
       <h3>What is the Purpose of a Skill File?</h3>
       <p>
@@ -793,9 +929,9 @@ converser_use_openrouter(
       </div>
     </section>
 
-    <!-- 10. REFERENCE -->
+    <!-- 11. REFERENCE -->
     <section id="reference">
-      <h2><span class="step-num">10</span> Function Reference</h2>
+      <h2><span class="step-num">11</span> Function Reference</h2>
       <table>
         <thead>
           <tr>

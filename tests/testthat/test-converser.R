@@ -698,3 +698,149 @@ test_that("viewer guard and deferred task callback alert when another package oc
   expect_false("converser_viewer_guard" %in% getTaskCallbackNames())
 })
 
+test_that("Model Consultation: detect_model_function recognizes all 12 model families and rejects non-models", {
+  # 1. Linear & ANOVA
+  expect_equal(ConverseR:::detect_model_function("fit <- lm(y ~ x, data = df)"), "lm")
+  expect_equal(ConverseR:::detect_model_function("res <- aov(yield ~ block + N*P, data = npk)"), "aov")
+  expect_equal(ConverseR:::detect_model_function("anova(mod1, mod2)"), "anova")
+  expect_equal(ConverseR:::detect_model_function("car::Anova(fit, type = 'III')"), "anova")
+  expect_equal(ConverseR:::detect_model_function("manova(cbind(y1, y2) ~ group)"), "manova")
+
+  # 2. Generalized Linear & Count Models
+  expect_equal(ConverseR:::detect_model_function("glm(y ~ x, family = binomial, data = d)"), "glm")
+  expect_equal(ConverseR:::detect_model_function("MASS::glm.nb(days ~ age, data = quine)"), "glm.nb")
+  expect_equal(ConverseR:::detect_model_function("zeroinfl(art ~ fem + mar | fem, data = bio)"), "zeroinfl")
+  expect_equal(ConverseR:::detect_model_function("pscl::hurdle(count ~ x | z)"), "hurdle")
+
+  # 3. Mixed-Effects & Multilevel
+  expect_equal(ConverseR:::detect_model_function("lme4::lmer(Reaction ~ Days + (Days | Subject), sleepstudy)"), "lmer")
+  expect_equal(ConverseR:::detect_model_function("glmer(cbind(incidence, size - incidence) ~ period + (1 | herd), family = binomial)"), "glmer")
+  expect_equal(ConverseR:::detect_model_function("nlmer(circumference ~ SSlogis(age, Asym, xmid, scal) ~ Asym|Tree)"), "nlmer")
+  expect_equal(ConverseR:::detect_model_function("nlme::lme(distance ~ age, random = ~1 | Subject)"), "lme")
+  expect_equal(ConverseR:::detect_model_function("glmmTMB::glmmTMB(count ~ spp + (1|site), family = nbinom2)"), "glmmtmb")
+
+  # 4. Econometric & Fixed Effects
+  expect_equal(ConverseR:::detect_model_function("fixest::feols(y ~ x1 + x2 | id + year, data = base)"), "feols")
+  expect_equal(ConverseR:::detect_model_function("feglm(y ~ x | id, family = 'poisson')"), "feglm")
+  expect_equal(ConverseR:::detect_model_function("fepois(trade ~ dist | exp + imp)"), "fepois")
+  expect_equal(ConverseR:::detect_model_function("fenegbin(y ~ x | id)"), "fenegbin")
+  expect_equal(ConverseR:::detect_model_function("feNmlm(y ~ x | id)"), "fenmlm")
+  expect_equal(ConverseR:::detect_model_function("plm::plm(inv ~ value + capital, data = Grunfeld, model = 'within')"), "plm")
+  expect_equal(ConverseR:::detect_model_function("ivreg(packs ~ price | tax, data = CigarettesSW)"), "ivreg")
+
+  # 5. Bayesian Models
+  expect_equal(ConverseR:::detect_model_function("brms::brm(count ~ zAge + (1|patient), family = poisson())"), "brm")
+  expect_equal(ConverseR:::detect_model_function("rstanarm::stan_glm(y ~ x, data = d)"), "stan_glm")
+  expect_equal(ConverseR:::detect_model_function("stan_glmer(y ~ x + (1|g), family = binomial)"), "stan_glmer")
+  expect_equal(ConverseR:::detect_model_function("stan_lmer(Reaction ~ Days + (1|Subject))"), "stan_lmer")
+
+  # 6. Generalized Additive Models (GAMs)
+  expect_equal(ConverseR:::detect_model_function("mgcv::gam(y ~ s(x0) + s(x1), data = dat)"), "gam")
+  expect_equal(ConverseR:::detect_model_function("bam(y ~ s(x0) + s(x1), data = big_data)"), "bam")
+
+  # 7. Survival Analysis
+  expect_equal(ConverseR:::detect_model_function("survival::coxph(Surv(time, status) ~ age + sex, lung)"), "coxph")
+  expect_equal(ConverseR:::detect_model_function("survreg(Surv(futime, fustat) ~ ecog.ps + rx, ovarian)"), "survreg")
+
+  # 8. Ordinal & Categorical
+  expect_equal(ConverseR:::detect_model_function("MASS::polr(Sat ~ Infl + Type, data = housing)"), "polr")
+  expect_equal(ConverseR:::detect_model_function("nnet::multinom(prog ~ ses + write, data = hsbdemo)"), "multinom")
+  expect_equal(ConverseR:::detect_model_function("ordinal::clm(rating ~ temp + contact, data = wine)"), "clm")
+  expect_equal(ConverseR:::detect_model_function("clmm(rating ~ temp + (1|judge), data = wine)"), "clmm")
+
+  # 9. Structural Equation Modeling (SEM)
+  expect_equal(ConverseR:::detect_model_function("lavaan::sem(model_syntax, data = HolzingerSwineford1939)"), "sem")
+  expect_equal(ConverseR:::detect_model_function("cfa(model, data = dat)"), "cfa")
+  expect_equal(ConverseR:::detect_model_function("growth(model, data = demo)"), "growth")
+
+  # 10. Robust & Quantile
+  expect_equal(ConverseR:::detect_model_function("MASS::rlm(stack.loss ~ ., data = stackloss)"), "rlm")
+  expect_equal(ConverseR:::detect_model_function("robustbase::lmrob(y ~ x)"), "lmrob")
+  expect_equal(ConverseR:::detect_model_function("glmrob(y ~ x, family = binomial)"), "glmrob")
+  expect_equal(ConverseR:::detect_model_function("quantreg::rq(foodexp ~ income, tau = 0.5)"), "rq")
+
+  # 11. GEE & Longitudinal
+  expect_equal(ConverseR:::detect_model_function("geepack::geeglm(response ~ time, id = id, family = binomial)"), "geeglm")
+  expect_equal(ConverseR:::detect_model_function("gee(y ~ x, id = id)"), "gee")
+
+  # 12. Meta-Analysis
+  expect_equal(ConverseR:::detect_model_function("metafor::rma(yi, vi, data = dat)"), "rma")
+  expect_equal(ConverseR:::detect_model_function("rma.uni(yi, vi)"), "rma.uni")
+  expect_equal(ConverseR:::detect_model_function("rma.mv(yi, vi, random = ~ 1 | district)"), "rma.mv")
+
+  # Negative cases
+  expect_null(ConverseR:::detect_model_function("calmer <- 5"))
+  expect_null(ConverseR:::detect_model_function("filter(df, a > 1)"))
+  expect_null(ConverseR:::detect_model_function("ggplot(df, aes(x, y)) + geom_point()"))
+  expect_null(ConverseR:::detect_model_function("library(lme4)"))
+  expect_null(ConverseR:::detect_model_function(""))
+  expect_null(ConverseR:::detect_model_function(NULL))
+  expect_null(ConverseR:::detect_model_function(character(0)))
+})
+
+test_that("Model Consultation: system prompt, turn payload, and sidebar UI wiring", {
+  # 1. System prompt includes non-jargony rules when is_consult = TRUE
+  prompt_consult <- ConverseR:::construct_system_prompt(mode = "sidebar", is_consult = TRUE)
+  expect_true(grepl("ACTIVE WORKFLOW: STATISTICAL MODEL CONSULTATION", prompt_consult, fixed = TRUE))
+  expect_true(grepl("STRICT NON-JARGONY COMMUNICATION", prompt_consult, fixed = TRUE))
+  expect_true(grepl("STRUCTURED 3-STEP CONSULTATION", prompt_consult, fixed = TRUE))
+
+  # Default prompt excludes consult section
+  prompt_default <- ConverseR:::construct_system_prompt(mode = "sidebar", is_consult = FALSE)
+  expect_false(grepl("ACTIVE WORKFLOW: STATISTICAL MODEL CONSULTATION", prompt_default, fixed = TRUE))
+
+  # 2. construct_turn prepends Model Consultation Request and enables whole doc
+  fake_ctx <- structure(
+    list(
+      id = "doc_test",
+      path = "model_test.R",
+      contents = c(
+        "library(lme4)",
+        "fit <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)",
+        "summary(fit)"
+      ),
+      selection = structure(
+        list(list(
+          range = list(start = c(row = 2L, column = 1L), end = c(row = 2L, column = 67L)),
+          text = "fit <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)"
+        )),
+        class = "document_selection"
+      )
+    ),
+    class = "document_context"
+  )
+  turn_consult <- ConverseR:::construct_turn(
+    user_prompt = "Evaluate this model",
+    context = fake_ctx,
+    is_consult = TRUE
+  )
+  expect_true(grepl("\\[Model Consultation Request\\]", turn_consult))
+  expect_true(grepl("fit <- lmer", turn_consult, fixed = TRUE))
+
+  # 3. Sidebar HTML and router integration
+  html_page <- ConverseR:::sidebar_single_page_html()
+  expect_true(grepl("rc-pill-consult", html_page, fixed = TRUE))
+  expect_true(grepl("id=\"consult_btn\"", html_page, fixed = TRUE))
+  expect_true(grepl("Model Consultation", html_page, fixed = TRUE))
+  expect_true(grepl("quickAction('consult')", html_page, fixed = TRUE))
+
+  # 4. State API returns has_model and model_fn
+  res_state <- ConverseR:::handle_sidebar_http_request(list(
+    PATH_INFO = "/api/state",
+    REQUEST_METHOD = "GET"
+  ))
+  parsed_state <- jsonlite::fromJSON(res_state$body)
+  expect_true("has_model" %in% names(parsed_state))
+  expect_true("model_fn" %in% names(parsed_state))
+
+  # 5. Selection API returns has_model and model_fn
+  res_sel <- ConverseR:::handle_sidebar_http_request(list(
+    PATH_INFO = "/api/selection",
+    REQUEST_METHOD = "GET"
+  ))
+  parsed_sel <- jsonlite::fromJSON(res_sel$body)
+  expect_true(isTRUE(parsed_sel$ok))
+  expect_true("has_model" %in% names(parsed_sel))
+  expect_true("model_fn" %in% names(parsed_sel))
+})
+
