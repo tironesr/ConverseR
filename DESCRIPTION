@@ -2,7 +2,7 @@ Package: ConverseR
 Title: Next-Generation Context-Aware LLM Assistant and Sidebar for RStudio and Positron
 Version: 0.4.0
 Authors@R: 
-    person("Tyrone", "", , "tyrone@example.com", role = c("aut", "cre"))
+    person("", "", , "private@example.com", role = c("aut", "cre"))
 Description: A high-performance, fault-tolerant Large Language Model integration 
     for RStudio and Positron built on 'ellmer'. Overcomes the limitations of 
     first-generation inline assistants by providing a non-blocking background 
